@@ -1,1 +1,6 @@
+grpcio==1.63.0
+grpcio-tools==1.63.0
+protobuf==5.26.1
+PyYAML==6.0.1
+sortedcontainers==2.4.0
 v4-proto==4.0.1
