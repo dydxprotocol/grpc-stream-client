@@ -6,3 +6,4 @@ stream_options:
     - 0
     - 1
     - 2
+interval_ms: 250 # Print book state every 250ms
