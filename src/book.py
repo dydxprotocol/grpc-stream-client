@@ -2,7 +2,7 @@
 Limit order book data structure (l3) for orders with dYdX protocol order IDs.
 """
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Iterator
 
 from sortedcontainers import SortedDict
 
@@ -82,6 +82,12 @@ class LimitOrderBook:
 
         return order
 
+    def get_order(self, oid: OrderId) -> Order:
+        """
+        Get an order from the book by its order ID.
+        """
+        return self.oid_to_order_node[oid].data
+
     def update_order(self, oid: OrderId, new_quantums: int) -> Order:
         """
         Update the quantums of an order in the book by its order ID without
@@ -91,7 +97,7 @@ class LimitOrderBook:
         order_node.data.quantums = new_quantums
         return order_node.data
 
-    def asks(self):
+    def asks(self) -> Iterator[Order]:
         """
         Iterate over the asks in ascending order.
         """
@@ -99,7 +105,7 @@ class LimitOrderBook:
             for order in level:
                 yield order
 
-    def bids(self):
+    def bids(self) -> Iterator[Order]:
         """
         Iterate over the bids in descending order.
         """
