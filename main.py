@@ -13,6 +13,7 @@ from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
 import src.config as config
+import src.market_info as units
 from src.feed_handler import FeedHandler
 
 
@@ -40,20 +41,34 @@ async def listen_to_stream(
         raise e
 
 
-async def print_books_every_n_ms(feed_handler: FeedHandler, ms: int):
+async def print_books_every_n_ms(
+        feed_handler: FeedHandler,
+        cpid_to_market_info: dict[int, dict],
+        ms: int,
+):
     """
     Every `ms` milliseconds, print the top asks and bids in each book.
     """
     while True:
         await asyncio.sleep(ms / 1000)
         for clob_pair_id, book in feed_handler.books.items():
-            print(f"Book for CLOB pair {clob_pair_id}:")
-            pretty_print_book(book)
+            info = cpid_to_market_info[clob_pair_id]
+            print(f"Book for CLOB pair {clob_pair_id} ({info['ticker']}):")
+            pretty_print_book(
+                book,
+                info['atomicResolution'],
+                info['quantumConversionExponent'],
+            )
 
 
-def pretty_print_book(book: lob.LimitOrderBook):
+def pretty_print_book(
+        book: lob.LimitOrderBook,
+        atomic_resolution: int,
+        quantum_conversion_exponent: int,
+):
     """
-    Pretty print the top 5 ask and bid orders in the order book.
+    Pretty print the top 5 ask and bid orders in the order book, converting
+    integer fields to human-readable decimals.
     """
     # take the top 5 asks and bids
     top_asks = list(itertools.islice(book.asks(), 5))
@@ -62,8 +77,10 @@ def pretty_print_book(book: lob.LimitOrderBook):
     # print the top 5 asks in reverse order then the top 5 bids
     print(f"{'Price':>12} {'Qty':>12} {'Client Id':>12} {'Address':>43} Acc")
     for o in top_asks[::-1]:
-        print(f"{o.subticks:>12} "
-              f"{o.quantums:>12} "
+        price = units.subticks_to_price(o.subticks, atomic_resolution, quantum_conversion_exponent)
+        size = units.quantums_to_size(o.quantums, atomic_resolution)
+        print(f"{price:>12f} "
+              f"{size:>12f} "
               f"{o.order_id.client_id:>12} "
               f"{o.order_id.owner_address:>43} "
               f"{o.order_id.subaccount_number}")
@@ -71,8 +88,10 @@ def pretty_print_book(book: lob.LimitOrderBook):
     print(f"{'--':>12} {'--':>12}")
 
     for o in top_bids:
-        print(f"{o.subticks:>12} "
-              f"{o.quantums:>12} "
+        price = units.subticks_to_price(o.subticks, atomic_resolution, quantum_conversion_exponent)
+        size = units.quantums_to_size(o.quantums, atomic_resolution)
+        print(f"{price:>12f} "
+              f"{size:>12f} "
               f"{o.order_id.client_id:>12} "
               f"{o.order_id.owner_address:>43} "
               f"{o.order_id.subaccount_number}")
@@ -80,7 +99,7 @@ def pretty_print_book(book: lob.LimitOrderBook):
     print()
 
 
-async def main(conf: dict):
+async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
     host = conf['dydx_full_node']['grpc_host']
     port = conf['dydx_full_node']['grpc_port']
     cpids = conf['stream_options']['clob_pair_ids']
@@ -93,13 +112,22 @@ async def main(conf: dict):
     # (adjust to use secure channel if needed)
     async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
         interval = conf['interval_ms']
+        print_books_task = asyncio.create_task(
+            print_books_every_n_ms(
+                feed_handler,
+                cpid_to_market_info,
+                interval,
+            ),
+        )
         await asyncio.gather(
             listen_to_stream(channel, cpids, feed_handler),
-            asyncio.create_task(print_books_every_n_ms(feed_handler, interval)),
+            print_books_task,
         )
 
 
 if __name__ == "__main__":
     c = config.load_yaml_config("config.yaml")
     print("Starting with conf:", c)
-    asyncio.run(main(c))
+    id_to_info = units.query_market_info(c['indexer_api'])
+    print("Got market info: ", id_to_info)
+    asyncio.run(main(c, id_to_info))
