@@ -33,7 +33,7 @@ class LimitOrderBook:
     """
     A limit order book for a single CLOB pair.
 
-    Insertion and removal are O(log(N)) operations, update is O(1).
+    Insertion is O(log(N)), removal and update are O(1).
     """
     def __init__(self):
         self.oid_to_order_node: Dict[OrderId, ListNode] = {}
