@@ -1,12 +1,14 @@
+"""
+Connect to a full node gRPC feed and print the top 5 asks and bids every 1000ms.
+"""
+
 import asyncio
 import itertools
-from typing import List
 
 import grpc
 from google.protobuf.json_format import MessageToJson
 # Classes generated from the proto files
-from v4_proto.dydxprotocol.clob.query_pb2 import (StreamOrderbookUpdatesRequest,
-                                                  StreamOrderbookUpdatesResponse)
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
@@ -14,22 +16,23 @@ from src.config import GRPC_OPTIONS, CONFIG
 from src.feed_handler import FeedHandler
 
 
-async def listen_to_stream(
-        channel: grpc.Channel,
-        buffer: List[StreamOrderbookUpdatesResponse],
-):
+async def listen_to_stream(channel: grpc.Channel, feed_handler: FeedHandler):
     """
-    Listen to the gRPC stream of order book updates and append them to the
-    buffer until the stream ends.
+    Listen to the gRPC stream of order book updates and use the `feed_handler`
+    to keep track of the order book state.
     """
     try:
+        # As soon as the channel is open, request the stream
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(
             clob_pair_id=CONFIG['stream_options']['clob_pair_ids']
         )
+
+        # Pass each of the stream's messages to the feed handler
         async for response in stub.StreamOrderbookUpdates(request):
-            response: StreamOrderbookUpdatesResponse
-            buffer.append(response)
+            print(f"> {MessageToJson(response, indent=None)}")
+            feed_handler.handle(response)
+
         print("Stream ended")
     except grpc.aio.AioRpcError as e:
         print(f"gRPC error occurred: {e.code()} - {e.details()}")
@@ -37,33 +40,15 @@ async def listen_to_stream(
         print(f"Unexpected error in stream: {e}")
 
 
-async def process_buffer_every_n_ms(
-        buffer: List[StreamOrderbookUpdatesResponse],
-        ms: int,
-):
+async def print_books_every_n_ms(feed_handler: FeedHandler, ms: int):
     """
-    Every `ms` milliseconds, update the state of the order books and print the
-    top asks and bids.
+    Every `ms` milliseconds, print the top asks and bids in each book.
     """
-    handler = FeedHandler()
     while True:
         await asyncio.sleep(ms / 1000)
-
-        # Debug buffer contents
-        print(f"Buffer has {len(buffer)} messages")
-        for response in buffer:
-            print(f"> {MessageToJson(response, indent=None)}")
-
-        # Update state for each message
-        for msg in buffer:
-            handler.handle(msg)
-
-        # Print book state
-        for clob_pair_id, book in handler.books.items():
+        for clob_pair_id, book in feed_handler.books.items():
             print(f"Book for CLOB pair {clob_pair_id}:")
             pretty_print_book(book)
-
-        buffer.clear()
 
 
 def pretty_print_book(book: lob.LimitOrderBook):
@@ -76,14 +61,22 @@ def pretty_print_book(book: lob.LimitOrderBook):
 
     # print the top 5 asks in reverse order then the top 5 bids
     print(f"{'Price':>12} {'Qty':>12} {'Client Id':>12} {'Address':>43} Acc")
-    for side in [top_asks[::-1], top_bids]:
-        for o in side:
-            print(f"{o.subticks:>12} "
-                  f"{o.quantums:>12} "
-                  f"{o.order_id.client_id:>12} "
-                  f"{o.order_id.owner_address:>43} "
-                  f"{o.order_id.subaccount_number}")
-        print(f"{'--':>12} {'--':>12}")
+    for o in top_asks[::-1]:
+        print(f"{o.subticks:>12} "
+              f"{o.quantums:>12} "
+              f"{o.order_id.client_id:>12} "
+              f"{o.order_id.owner_address:>43} "
+              f"{o.order_id.subaccount_number}")
+
+    print(f"{'--':>12} {'--':>12}")
+
+    for o in top_bids:
+        print(f"{o.subticks:>12} "
+              f"{o.quantums:>12} "
+              f"{o.order_id.client_id:>12} "
+              f"{o.order_id.owner_address:>43} "
+              f"{o.order_id.subaccount_number}")
+
     print()
 
 
@@ -96,13 +89,16 @@ async def main():
     port = CONFIG['dydx_full_node']['grpc_port']
     addr = f"{host}:{port}"
 
-    # Adjust to use secure channel if needed
-    buffer: List[StreamOrderbookUpdatesResponse] = []
+    # This manages order book state
+    feed_handler = FeedHandler()
+
+    # Connect to the gRPC feed and start listening
+    # (adjust to use secure channel if needed)
     async with grpc.aio.insecure_channel(addr, GRPC_OPTIONS) as channel:
         interval = CONFIG['interval_ms']
         await asyncio.gather(
-            listen_to_stream(channel, buffer),
-            asyncio.create_task(process_buffer_every_n_ms(buffer, interval)),
+            listen_to_stream(channel, feed_handler),
+            asyncio.create_task(print_books_every_n_ms(feed_handler, interval)),
         )
 
 
