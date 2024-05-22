@@ -13,8 +13,8 @@ from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
 import src.config as config
-import src.market_info as units
 from src.feed_handler import FeedHandler
+from src.market_info import query_market_info, quantums_to_size, subticks_to_price
 
 
 async def listen_to_stream(
@@ -77,8 +77,8 @@ def pretty_print_book(
     # print the top 5 asks in reverse order then the top 5 bids
     print(f"{'Price':>12} {'Qty':>12} {'Client Id':>12} {'Address':>43} Acc")
     for o in top_asks[::-1]:
-        price = units.subticks_to_price(o.subticks, atomic_resolution, quantum_conversion_exponent)
-        size = units.quantums_to_size(o.quantums, atomic_resolution)
+        price = subticks_to_price(o.subticks, atomic_resolution, quantum_conversion_exponent)
+        size = quantums_to_size(o.quantums, atomic_resolution)
         print(f"{price:>12f} "
               f"{size:>12f} "
               f"{o.order_id.client_id:>12} "
@@ -88,8 +88,8 @@ def pretty_print_book(
     print(f"{'--':>12} {'--':>12}")
 
     for o in top_bids:
-        price = units.subticks_to_price(o.subticks, atomic_resolution, quantum_conversion_exponent)
-        size = units.quantums_to_size(o.quantums, atomic_resolution)
+        price = subticks_to_price(o.subticks, atomic_resolution, quantum_conversion_exponent)
+        size = quantums_to_size(o.quantums, atomic_resolution)
         print(f"{price:>12f} "
               f"{size:>12f} "
               f"{o.order_id.client_id:>12} "
@@ -128,6 +128,6 @@ async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
 if __name__ == "__main__":
     c = config.load_yaml_config("config.yaml")
     print("Starting with conf:", c)
-    id_to_info = units.query_market_info(c['indexer_api'])
+    id_to_info = query_market_info(c['indexer_api'])
     print("Got market info: ", id_to_info)
     asyncio.run(main(c, id_to_info))
