@@ -1,9 +1,9 @@
 """
 Connect to a full node gRPC feed and print the top 5 asks and bids every 1000ms.
 """
-
 import asyncio
 import itertools
+from typing import List
 
 import grpc
 from google.protobuf.json_format import MessageToJson
@@ -12,32 +12,32 @@ from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
-from src.config import GRPC_OPTIONS, CONFIG
+import src.config as config
 from src.feed_handler import FeedHandler
 
 
-async def listen_to_stream(channel: grpc.Channel, feed_handler: FeedHandler):
+async def listen_to_stream(
+        channel: grpc.Channel,
+        clob_pair_ids: List[int],
+        feed_handler: FeedHandler,
+):
     """
-    Listen to the gRPC stream of order book updates and use the `feed_handler`
-    to keep track of the order book state.
+    Subscribe to the gRPC stream of order book updates and use the
+    `feed_handler` to keep track of the order book state.
     """
     try:
-        # As soon as the channel is open, request the stream
         stub = QueryStub(channel)
-        request = StreamOrderbookUpdatesRequest(
-            clob_pair_id=CONFIG['stream_options']['clob_pair_ids']
-        )
-
-        # Pass each of the stream's messages to the feed handler
+        request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
         async for response in stub.StreamOrderbookUpdates(request):
             print(f"> {MessageToJson(response, indent=None)}")
             feed_handler.handle(response)
-
         print("Stream ended")
     except grpc.aio.AioRpcError as e:
         print(f"gRPC error occurred: {e.code()} - {e.details()}")
+        raise e
     except Exception as e:
         print(f"Unexpected error in stream: {e}")
+        raise e
 
 
 async def print_books_every_n_ms(feed_handler: FeedHandler, ms: int):
@@ -80,13 +80,10 @@ def pretty_print_book(book: lob.LimitOrderBook):
     print()
 
 
-async def main():
-    """
-    Main entry point for the script. Load the configuration, connect to the
-    gRPC feed, and kick off processing.
-    """
-    host = CONFIG['dydx_full_node']['grpc_host']
-    port = CONFIG['dydx_full_node']['grpc_port']
+async def main(conf: dict):
+    host = conf['dydx_full_node']['grpc_host']
+    port = conf['dydx_full_node']['grpc_port']
+    cpids = conf['stream_options']['clob_pair_ids']
     addr = f"{host}:{port}"
 
     # This manages order book state
@@ -94,14 +91,15 @@ async def main():
 
     # Connect to the gRPC feed and start listening
     # (adjust to use secure channel if needed)
-    async with grpc.aio.insecure_channel(addr, GRPC_OPTIONS) as channel:
-        interval = CONFIG['interval_ms']
+    async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
+        interval = conf['interval_ms']
         await asyncio.gather(
-            listen_to_stream(channel, feed_handler),
+            listen_to_stream(channel, cpids, feed_handler),
             asyncio.create_task(print_books_every_n_ms(feed_handler, interval)),
         )
 
 
 if __name__ == "__main__":
-    print("Starting with conf:", CONFIG)
-    asyncio.run(main())
+    c = config.load_yaml_config("config.yaml")
+    print("Starting with conf:", c)
+    asyncio.run(main(c))
