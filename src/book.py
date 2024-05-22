@@ -14,7 +14,7 @@ class OrderId:
     """
     owner_address: str  # address of the account which placed the order
     subaccount_number: int  # index of the subaccount belonging to owner
-    client_id: int  # client identifier for the order (unique at any given time)
+    client_id: int  # client identifier for the order (unique at any given time, but can be reused)
 
 
 @dataclass
@@ -22,7 +22,6 @@ class Order:
     """
     An order with integer fields and a known owner.
     """
-
     order_id: OrderId
     is_bid: bool
     original_quantums: int  # integer size originally placed (needs conversion to decimal)
@@ -47,9 +46,6 @@ class LimitOrderBook:
         """
         Get or create a level in the book side. Each level is a doubly linked
         list of orders.
-        :param subticks:
-        :param book_side:
-        :return:
         """
         if subticks not in book_side:
             book_side[subticks] = DoublyLinkedList()
