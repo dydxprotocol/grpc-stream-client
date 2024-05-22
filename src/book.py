@@ -25,7 +25,8 @@ class Order:
 
     order_id: OrderId
     is_bid: bool
-    quantums: int  # integer size (needs conversion to decimal)
+    original_quantums: int  # integer size originally placed (needs conversion to decimal)
+    quantums: int  # integer size remaining in the book (needs conversion to decimal)
     subticks: int  # integer price (needs conversion to decimal)
 
 

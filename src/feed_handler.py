@@ -21,11 +21,11 @@ class FeedHandler:
         self.has_seen_first_snapshot = False
 
     def handle(self, message: StreamOrderbookUpdatesResponse):
-
         """
         Handle a message from the gRPC feed, updating the local order book
         state.
         """
+        # Skip messages until the first snapshot is received
         if not self.has_seen_first_snapshot and not message.snapshot:
             return
 
@@ -64,14 +64,10 @@ class FeedHandler:
         order = lob.Order(
             order_id=oid,
             is_bid=order_place.order.side == IndexerOrder.SIDE_BUY,
+            original_quantums=order_place.order.quantums,
             quantums=order_place.order.quantums,
             subticks=order_place.order.subticks,
         )
-
-        # Store the original quantums for the order because update messages
-        # will only contain the total fill amount, which can be diffed with
-        # the original quantums to get the remaining amount.
-        order.original_quantums = order.quantums
 
         # Insert the order into the relevant book
         clob_pair_id = order_place.order.order_id.clob_pair_id
@@ -96,7 +92,7 @@ class FeedHandler:
         """
         # Remove the order from the relevant book
         clob_pair_id = order_remove.removed_order_id.clob_pair_id
-        o = self._get_book(clob_pair_id).remove_order(parse_id(order_remove.removed_order_id))
+        self._get_book(clob_pair_id).remove_order(parse_id(order_remove.removed_order_id))
 
 
 def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:

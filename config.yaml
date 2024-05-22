@@ -4,6 +4,6 @@ dydx_full_node:
 stream_options:
   clob_pair_ids:  # IDs of the markets to stream
     - 0
-    - 1
-    - 2
+    #- 1
+    #- 2
 interval_ms: 1000 # Print book state every second
