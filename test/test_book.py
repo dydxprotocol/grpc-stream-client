@@ -2,6 +2,10 @@ import unittest
 from src.book import OrderId, Order, LimitOrderBook
 
 
+def o(addr, subacc, cid, is_bid, quantums, subticks):
+    return Order(OrderId(addr, subacc, cid), is_bid, quantums, quantums, subticks)
+
+
 class TestLimitOrderBook(unittest.TestCase):
     def setUp(self):
         # Initialize a LimitOrderBook before each test
@@ -10,12 +14,12 @@ class TestLimitOrderBook(unittest.TestCase):
     def test_order_insertion(self):
         # Create and add orders across multiple price levels
         orders = [
-            Order(OrderId("address1", 1, 101), True, 100, 50),
-            Order(OrderId("address2", 1, 102), True, 110, 50),
-            Order(OrderId("address3", 1, 103), True, 120, 51),
-            Order(OrderId("address4", 1, 104), False, 130, 52),
-            Order(OrderId("address5", 1, 105), False, 140, 52),
-            Order(OrderId("address6", 1, 106), False, 150, 53)
+            o("address1", 1, 101, True, 100, 50),
+            o("address2", 1, 102, True, 110, 50),
+            o("address3", 1, 103, True, 120, 51),
+            o("address4", 1, 104, False, 130, 52),
+            o("address5", 1, 105, False, 140, 52),
+            o("address6", 1, 106, False, 150, 53),
         ]
         for order in orders:
             self.lob.add_order(order)
@@ -40,10 +44,10 @@ class TestLimitOrderBook(unittest.TestCase):
     def test_order_removal(self):
         # Add multiple orders and then remove them
         orders = [
-            Order(OrderId("address1", 1, 101), True, 100, 50),
-            Order(OrderId("address2", 1, 102), True, 110, 50),
-            Order(OrderId("address3", 1, 103), False, 120, 51),
-            Order(OrderId("address4", 1, 104), False, 130, 51),
+            o("address1", 1, 101, True, 100, 50),
+            o("address2", 1, 102, True, 110, 50),
+            o("address3", 1, 103, False, 120, 51),
+            o("address4", 1, 104, False, 130, 51),
         ]
         for order in orders:
             self.lob.add_order(order)
@@ -64,7 +68,7 @@ class TestLimitOrderBook(unittest.TestCase):
 
     def test_order_update(self):
         # Add an order and update it
-        order = Order(OrderId("address4", 2, 104), False, 250, 53)
+        order = o("address4", 2, 104, False, 250, 53)
         self.lob.add_order(order)
         self.lob.update_order(order.order_id, 300)
 
@@ -74,9 +78,10 @@ class TestLimitOrderBook(unittest.TestCase):
 
     def test_order_levels(self):
         # Add multiple orders to the same level and different levels
-        order1 = Order(OrderId("address5", 3, 105), True, 300, 54)
-        order2 = Order(OrderId("address6", 3, 106), True, 350, 54)
-        order3 = Order(OrderId("address7", 3, 107), True, 400, 55)
+        order1 = o("address5", 3, 105, True, 300, 54)
+        order2 = o("address6", 3, 106, True, 350, 54)
+        order3 = o("address7", 3, 107, True, 400, 55)
+
         self.lob.add_order(order1)
         self.lob.add_order(order2)
         self.lob.add_order(order3)
