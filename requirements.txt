@@ -4,3 +4,4 @@ protobuf==5.26.1
 PyYAML==6.0.1
 sortedcontainers==2.4.0
 v4-proto==4.0.1
+requests~=2.32.2
