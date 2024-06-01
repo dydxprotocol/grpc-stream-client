@@ -3,7 +3,7 @@ import unittest
 from src.market_info import subticks_to_price, quantums_to_size
 
 
-class TestLimitOrderBook(unittest.TestCase):
+class TestMarketInfo(unittest.TestCase):
     def setUp(self):
         self.mock_market_info = {
             0: {'clobPairId': '0',
