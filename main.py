@@ -6,7 +6,6 @@ import itertools
 from typing import List
 
 import grpc
-from google.protobuf.json_format import MessageToJson
 # Classes generated from the proto files
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
@@ -30,7 +29,6 @@ async def listen_to_stream(
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
         async for response in stub.StreamOrderbookUpdates(request):
-            print(f"> {MessageToJson(response, indent=None)}")
             feed_handler.handle(response)
         print("Stream ended")
     except grpc.aio.AioRpcError as e:
