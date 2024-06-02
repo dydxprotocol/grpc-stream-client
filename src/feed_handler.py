@@ -1,16 +1,15 @@
 """
 Handle messages on the gRPC book feed and build local order books.
 """
-from typing import Dict
+from typing import Dict, List
 
-from google.protobuf.json_format import MessageToJson
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, StreamOrderbookUpdate, \
-    StreamOrderbookFill
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, StreamOrderbookUpdate
 from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 import OrderPlaceV1, OrderUpdateV1, \
     OrderRemoveV1, OffChainUpdateV1
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 
 import src.book as lob
+from src import fills
 
 
 class FeedHandler:
@@ -22,11 +21,13 @@ class FeedHandler:
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
 
-    def handle(self, message: StreamOrderbookUpdatesResponse):
+    def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
         Handle a message from the gRPC feed, updating the local order book
         state. See the protobuf definition[1] of `StreamOrderbookUpdatesResponse`
         for the message format.
+
+        Returns a list of fills that occurred in the message.
 
         [1]  https://github.com/dydxprotocol/v4-chain/blob/efa59b4bf40ee72077cc3c62013c1ae0da340163/proto/dydxprotocol/clob/query.proto#L172-L223
         """
@@ -35,8 +36,12 @@ class FeedHandler:
             update_type = update.WhichOneof('update_message')
             if update_type == 'orderbook_update':
                 self._handle_orderbook_update(update.orderbook_update)
+                return []
             elif update_type == 'order_fill':
-                self._handle_order_fill(update.order_fill)
+                # Does not update the book state, because order quantity remaining
+                # changes form partial / complete fills are handled by order
+                # update / remove messages.
+                return fills.parse_fill(update.order_fill, message.exec_mode)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -70,18 +75,6 @@ class FeedHandler:
                 self._handle_order_remove(u.order_remove)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {u}")
-
-    def _handle_order_fill(self, order_fill: StreamOrderbookFill):
-        """
-        Handle the StreamOrderbookFill message[1] by printing information about
-        the fill.
-
-        Does not update the book state, because order quantity remaining changes
-        form partial/complete fills are handled by order update/remove messages.
-
-        [1] https://github.com/dydxprotocol/v4-chain/blob/efa59b4bf40ee72077cc3c62013c1ae0da340163/proto/dydxprotocol/clob/query.proto#L212-L223
-        """
-        print(f"Fill: {MessageToJson(order_fill, indent=None)}")
 
     def _get_book(self, clob_pair_id: int) -> lob.LimitOrderBook:
         """
@@ -146,7 +139,8 @@ class FeedHandler:
         """
         # Remove the order from the relevant book
         clob_pair_id = order_remove.removed_order_id.clob_pair_id
-        self._get_book(clob_pair_id).remove_order(parse_id(order_remove.removed_order_id))
+        oid = parse_id(order_remove.removed_order_id)
+        self._get_book(clob_pair_id).remove_order(oid)
 
 
 def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:

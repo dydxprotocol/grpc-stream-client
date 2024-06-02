@@ -1,17 +1,20 @@
 """
-Connect to a full node gRPC feed and print the top 5 asks and bids every 1000ms.
+Connect to a full node gRPC feed and print the top 5 asks and bids periodically,
+along with trades whenever they occur.
 """
 import asyncio
 import itertools
 from typing import List
 
 import grpc
+from google.protobuf.json_format import MessageToJson
 # Classes generated from the proto files
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
 import src.config as config
+import src.fills as fills
 from src.feed_handler import FeedHandler
 from src.market_info import query_market_info, quantums_to_size, subticks_to_price
 
@@ -19,6 +22,7 @@ from src.market_info import query_market_info, quantums_to_size, subticks_to_pri
 async def listen_to_stream(
         channel: grpc.Channel,
         clob_pair_ids: List[int],
+        cpid_to_market_info: dict[int, dict],
         feed_handler: FeedHandler,
 ):
     """
@@ -29,7 +33,12 @@ async def listen_to_stream(
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
         async for response in stub.StreamOrderbookUpdates(request):
-            feed_handler.handle(response)
+            try:
+                fill_events = feed_handler.handle(response)
+                print_fills(fill_events, cpid_to_market_info)
+            except Exception as e:
+                print(f"Error handling message: {MessageToJson(e, indent=None)}")
+                raise e
         print("Stream ended")
     except grpc.aio.AioRpcError as e:
         print(f"gRPC error occurred: {e.code()} - {e.details()}")
@@ -37,6 +46,31 @@ async def listen_to_stream(
     except Exception as e:
         print(f"Unexpected error in stream: {e}")
         raise e
+
+
+def print_fills(
+        fill_events: List[fills.Fill],
+        cpid_to_market_info: dict[int, dict],
+):
+    """
+    Print the fills that occurred in the last message.
+    """
+    for fill in fill_events:
+        info = cpid_to_market_info[fill.clob_pair_id]
+        ar = info['atomicResolution']
+        qce = info['quantumConversionExponent']
+
+        print(
+            # Exec mode 7 is for fills finalized by consensus
+            '(optimistic)' if fill.exec_mode != 7 else '(finalized)',
+            fill.fill_type,
+            'buy' if fill.taker_is_buy else 'sell',
+            quantums_to_size(fill.quantums, ar),
+            '@',
+            subticks_to_price(fill.subticks, ar, qce),
+            f'taker={fill.taker}',
+            f'maker={fill.maker}',
+        )
 
 
 async def print_books_every_n_ms(
@@ -118,7 +152,7 @@ async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
             ),
         )
         await asyncio.gather(
-            listen_to_stream(channel, cpids, feed_handler),
+            listen_to_stream(channel, cpids, cpid_to_market_info, feed_handler),
             print_books_task,
         )
 
