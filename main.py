@@ -1,8 +1,12 @@
 """
-Connect to a full node gRPC feed and print the top 5 asks and bids every 1000ms.
+Connect to a full node gRPC feed and print the top 5 asks and bids periodically,
+along with trades whenever they occur.
+
+Logs all messages in JSON format to the path specified in config.yaml.
 """
 import asyncio
 import itertools
+import logging
 from typing import List
 
 import grpc
@@ -13,6 +17,7 @@ from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
 import src.config as config
+import src.fills as fills
 from src.feed_handler import FeedHandler
 from src.market_info import query_market_info, quantums_to_size, subticks_to_price
 
@@ -20,25 +25,62 @@ from src.market_info import query_market_info, quantums_to_size, subticks_to_pri
 async def listen_to_stream(
         channel: grpc.Channel,
         clob_pair_ids: List[int],
+        cpid_to_market_info: dict[int, dict],
         feed_handler: FeedHandler,
+        log_path: str,
 ):
     """
     Subscribe to the gRPC stream of order book updates and use the
-    `feed_handler` to keep track of the order book state.
+    `feed_handler` to keep track of the order book state. Print any
+    fills that occur.
     """
     try:
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
-        async for response in stub.StreamOrderbookUpdates(request):
-            print(f"> {MessageToJson(response, indent=None)}")
-            feed_handler.handle(response)
-        print("Stream ended")
+        with open(log_path, 'w') as log:
+            async for response in stub.StreamOrderbookUpdates(request):
+                # Log the message
+                log.write(MessageToJson(response, indent=None) + '\n')
+
+                # Update the order book state and print any fills
+                try:
+                    fill_events = feed_handler.handle(response)
+                    print_fills(fill_events, cpid_to_market_info)
+                except Exception as e:
+                    logging.error(f"Error handling message: {MessageToJson(e, indent=None)}")
+                    raise e
+        logging.error("Stream ended")
     except grpc.aio.AioRpcError as e:
-        print(f"gRPC error occurred: {e.code()} - {e.details()}")
+        logging.error(f"gRPC error occurred: {e.code()} - {e.details()}")
         raise e
     except Exception as e:
-        print(f"Unexpected error in stream: {e}")
+        logging.error(f"Unexpected error in stream: {e}")
         raise e
+
+
+def print_fills(
+        fill_events: List[fills.Fill],
+        cpid_to_market_info: dict[int, dict],
+):
+    """
+    Print the fills that occurred in the last message.
+    """
+    for fill in fill_events:
+        info = cpid_to_market_info[fill.clob_pair_id]
+        ar = info['atomicResolution']
+        qce = info['quantumConversionExponent']
+
+        logging.info(" ".join([
+            # Exec mode 7 is for fills finalized by consensus
+            '(optimistic)' if fill.exec_mode != 7 else '(finalized)',
+            str(fill.fill_type),
+            'buy' if fill.taker_is_buy else 'sell',
+            str(quantums_to_size(fill.quantums, ar)),
+            '@',
+            str(subticks_to_price(fill.subticks, ar, qce)),
+            f'taker={fill.taker}',
+            f'maker={fill.maker}',
+        ]))
 
 
 async def print_books_every_n_ms(
@@ -120,14 +162,27 @@ async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
             ),
         )
         await asyncio.gather(
-            listen_to_stream(channel, cpids, feed_handler),
+            listen_to_stream(
+                channel,
+                cpids,
+                cpid_to_market_info,
+                feed_handler,
+                conf['log_stream_messages'],
+            ),
             print_books_task,
         )
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
+
     c = config.load_yaml_config("config.yaml")
-    print("Starting with conf:", c)
+    logging.info(f"Starting with conf: {c}")
+
     id_to_info = query_market_info(c['indexer_api'])
-    print("Got market info: ", id_to_info)
+    logging.info(f"Got market info: {id_to_info}")
+
     asyncio.run(main(c, id_to_info))

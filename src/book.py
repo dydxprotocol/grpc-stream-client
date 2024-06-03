@@ -2,7 +2,7 @@
 Limit order book data structure (l3) for orders with dYdX protocol order IDs.
 """
 from dataclasses import dataclass
-from typing import Dict, Iterator
+from typing import Dict, Iterator, Optional
 
 from sortedcontainers import SortedDict
 
@@ -79,20 +79,14 @@ class LimitOrderBook:
 
         return order
 
-    def get_order(self, oid: OrderId) -> Order:
+    def get_order(self, oid: OrderId) -> Optional[Order]:
         """
         Get an order from the book by its order ID.
         """
-        return self.oid_to_order_node[oid].data
-
-    def update_order(self, oid: OrderId, new_quantums: int) -> Order:
-        """
-        Update the quantums of an order in the book by its order ID without
-        changing its position in the queue.
-        """
-        order_node = self.oid_to_order_node[oid]
-        order_node.data.quantums = new_quantums
-        return order_node.data
+        node = self.oid_to_order_node.get(oid)
+        if node is None:
+            return None
+        return node.data
 
     def asks(self) -> Iterator[Order]:
         """
