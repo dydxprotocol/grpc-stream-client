@@ -7,3 +7,4 @@ stream_options:
     - 1
 interval_ms: 1000 # Print book state every second
 indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversions
+log_stream_messages: feed.log # Log messages to this file each time main is run
