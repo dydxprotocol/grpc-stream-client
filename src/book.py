@@ -88,15 +88,6 @@ class LimitOrderBook:
             return None
         return node.data
 
-    def update_order(self, oid: OrderId, new_quantums: int) -> Order:
-        """
-        Update the quantums of an order in the book by its order ID without
-        changing its position in the queue.
-        """
-        order_node = self.oid_to_order_node[oid]
-        order_node.data.quantums = new_quantums
-        return order_node.data
-
     def asks(self) -> Iterator[Order]:
         """
         Iterate over the asks in ascending order.

@@ -70,7 +70,9 @@ class TestLimitOrderBook(unittest.TestCase):
         # Add an order and update it
         order = o("address4", 2, 104, False, 250, 53)
         self.lob.add_order(order)
-        self.lob.update_order(order.order_id, 300)
+
+        retrieved = self.lob.get_order(order.order_id)
+        retrieved.quantums = 300
 
         # Check if the order's quantums are updated
         updated_order = next(self.lob.asks())
