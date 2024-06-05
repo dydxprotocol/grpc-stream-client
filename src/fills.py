@@ -15,6 +15,7 @@ from v4_proto.dydxprotocol.subaccounts.subaccount_pb2 import SubaccountId
 
 import src.book as lob
 
+# TODO: Deleveraging fills are not yet emitted by the full node
 FillType = Enum('FillType', ['NORMAL', 'LIQUIDATION', 'DELEVERAGING'])
 
 
@@ -58,8 +59,9 @@ def parse_fill(order_fill: StreamOrderbookFill, exec_mode: int) -> List[Fill]:
         return parse_fills(exec_mode, clob_match, order_states_at_fill_time)
     elif match_type == 'match_perpetual_liquidation':
         return parse_liquidations(exec_mode, clob_match, order_states_at_fill_time)
-    elif match_type == 'match_perpetual_deleveraging':
-        return parse_deleveragings(exec_mode, clob_match)
+    # TODO: Deleveraging fills are not yet emitted by the full node
+    # elif match_type == 'match_perpetual_deleveraging':
+    #     return parse_deleveragings(exec_mode, clob_match)
 
 
 def parse_pb_id(oid: OrderId) -> lob.OrderId:
@@ -144,6 +146,7 @@ def parse_liquidations(
     return fills
 
 
+# TODO: Deleveraging fills are not yet emitted by the full node
 def parse_deleveragings(exec_mode: int, clob_match: ClobMatch) -> List[Fill]:
     """
     Parse deleveraging fills from a MatchPerpetualDeleveraging message.
