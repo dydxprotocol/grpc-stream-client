@@ -101,9 +101,32 @@ def assert_books_equal(feed_state_1: FeedHandler, feed_state_2: FeedHandler):
         snap_bids = list(feed_state_2.books[clob_pair_id].bids())
 
         if snap_asks != feed_asks:
+            debug_book_side(feed_asks, snap_asks)
             raise AssertionError(f"asks for book {clob_pair_id} do not match")
         if snap_bids != feed_bids:
+            debug_book_side(feed_bids, snap_bids)
             raise AssertionError(f"bids for book {clob_pair_id} do not match")
+
+
+def debug_book_side(have_side: List[lob.Order], expect_side: List[lob.Order]):
+    """
+    Print each order book side by side for debugging.
+    """
+    print(f"   {'have':>38} | {'expect':>38}")
+    print(f"🟠 {'px':>12} {'sz':>12} {'cid':>12} | {'px':>12} {'sz':>12} {'cid':>12}")
+    i = 0
+    while i < len(have_side) or i < len(expect_side):
+        have = have_side[i] if i < len(have_side) else None
+        expect = expect_side[i] if i < len(expect_side) else None
+        status = "🟢" if have == expect else "🔴"
+        print(f"{status} "
+              f"{have.subticks if have else '':>12} "
+              f"{have.quantums if have else '':>12} "
+              f"{have.order_id.client_id if have else '':>12} | "
+              f"{expect.subticks if expect else '':>12} "
+              f"{expect.quantums if expect else '':>12} "
+              f"{expect.order_id.client_id if expect else '':>12}")
+        i += 1
 
 
 def asset_path(filename: str) -> str:
@@ -253,14 +276,14 @@ async def connect_and_collect_overlapping(conf: dict, parent: str, n_messages: i
     e = asyncio.Event()
 
     # Start recording the first set of messages
-    print(f"Recording {n_messages//1000}k messages to {log1}")
+    print(f"Recording {n_messages // 1000}k messages to {log1}")
     task1 = asyncio.create_task(record_messages(conf, log1, e, n_messages))
 
     await e.wait()
 
     # Start recording the second set of messages concurrently
     n = 1000
-    print(f"Recording {n//1000}k messages to {log2}")
+    print(f"Recording {n // 1000}k messages to {log2}")
     e2 = asyncio.Event()
     task2 = asyncio.create_task(record_messages(conf, log2, e2, n))
 
@@ -296,6 +319,22 @@ def unique_path(parent: str, base: str) -> str:
     return os.path.join(parent, f"{base}.{n}")
 
 
+def replay_test(feed_from_t0_path: str, feed_from_t1_path: str):
+    """
+    Replay the feed from t0 up to the snapshot in t1, load the snapshot from
+    t1, and check that the order book state from the t0 feed matches the
+    snapshot.
+
+    Throws an AssertionError if the order book states do not match.
+
+    :param feed_from_t0_path: Path to feed starting at t0 ending at t2
+    :param feed_from_t1_path: Path to feed starting at t1 ending < t2
+    """
+    snap, prev_msg = load_snapshot(feed_from_t1_path)
+    feed_state, n_messages = load_feed_through_snapshot(feed_from_t0_path, prev_msg)
+    assert_books_equal(feed_state, snap)
+
+
 async def long_running_test(conf: dict, n_messages: int):
     while True:
         # Create a temporary directory
@@ -304,9 +343,7 @@ async def long_running_test(conf: dict, n_messages: int):
 
             # Check if the feeds line up
             try:
-                snap, prev_msg = load_snapshot(l2)
-                feed_state, n_messages = load_feed_through_snapshot(l1, prev_msg)
-                assert_books_equal(feed_state, snap)
+                replay_test(l1, l2)
             except Exception as e:
                 to_dir = os.getcwd()
                 print(f"Identified inconsistent feed states: {e}")
@@ -335,5 +372,7 @@ if __name__ == '__main__':
     elif len(sys.argv) > 1 and sys.argv[1] == '--long-running-test':
         c = config.load_yaml_config('config.yaml')
         asyncio.run(long_running_test(c, int(sys.argv[2])))
+    elif len(sys.argv) > 1 and sys.argv[1] == '--replay-from':
+        replay_test(sys.argv[2], sys.argv[3])
     else:
         unittest.main()
