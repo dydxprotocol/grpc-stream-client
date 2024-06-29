@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from google.protobuf import json_format
-# Classes generated from the proto files
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, \
     StreamOrderbookUpdate, StreamOrderbookFill
 from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 import OrderPlaceV1, OrderUpdateV1, \
@@ -21,7 +20,7 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder
 
 import src.fills as fills
-from test.test_feed_handler import read_message_from_log
+from src.serde import read_message_from_log
 
 TIFS = {
     IndexerOrder.TIME_IN_FORCE_UNSPECIFIED: 'GTT',
@@ -77,7 +76,7 @@ def json_log_to_csv(in_path: str):
         for line in in_file:
             message = StreamOrderbookUpdatesResponse()
             json_format.Parse(line, message)
-            for event in feed_msg_to_events(message):
+            for event in feed_msg_to_events(message, None):
                 writer.writerow([getattr(event, field) for field in Event.__dataclass_fields__.keys()])
 
 
@@ -90,20 +89,23 @@ def proto_log_to_csv(in_path: str):
         writer = csv.writer(sys.stdout)
         writer.writerow(Event.__dataclass_fields__.keys())
         while (message := read_message_from_log(log)) is not None:
-            for event in feed_msg_to_events(message):
+            for event in feed_msg_to_events(message[1], message[0]):
                 writer.writerow([getattr(event, field) for field in Event.__dataclass_fields__.keys()])
 
 
-def feed_msg_to_events(message: StreamOrderbookUpdatesResponse) -> List[Event]:
+def feed_msg_to_events(
+        message: StreamOrderbookUpdatesResponse,
+        ts: Optional[datetime.datetime]
+) -> List[Event]:
     """
     Parse a message from the gRPC feed into a list of event line items.
     """
-    ts = datetime.datetime.now().isoformat()
-    height = message.block_height
-    mode = message.exec_mode
-
+    ts = datetime.datetime.now().isoformat() if ts is None else ts
     es = []
     for update in message.updates:
+        height = update.block_height
+        mode = update.exec_mode
+
         update_type = update.WhichOneof('update_message')
         if update_type == 'orderbook_update':
             for x in parse_orderbook_updates(ts, height, mode, update.orderbook_update):
