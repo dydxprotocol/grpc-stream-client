@@ -1,106 +1,187 @@
 import unittest
+from decimal import Decimal
 
 from google.protobuf import json_format
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookFill
 
 from src.fills import parse_fill, FillType
 
 # Example fill taken from the stream, encoded as JSON
 FILL_JSON = """
 {
-  "updates": [
-    {
-      "orderFill": {
-        "clobMatch": {
-          "matchOrders": {
-            "takerOrderId": {
-              "subaccountId": {
-                "owner": "dydx1dj2nd8lgadugrl98gd8cu9zltd2uz2jncpwny9"
-              },
-              "clientId": 1716570794
+  "clobMatch": {
+    "matchOrders": {
+      "takerOrderId": {
+        "subaccountId": {
+          "owner": "dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn"
+        },
+        "clientId": 1368487720
+      },
+      "fills": [
+        {
+          "fillAmount": "1527000000",
+          "makerOrderId": {
+            "subaccountId": {
+              "owner": "dydx100l9m6g70j28g2tk3jj4plmge8vsmj6jdrlzhk",
+              "number": 1
             },
-            "fills": [
-              {
-                "fillAmount": "13000000",
-                "makerOrderId": {
-                  "subaccountId": {
-                    "owner": "dydx1expvgcc4j9cqnag2yp4n0tzf4ejtxtgnpj928r"
-                  },
-                  "clientId": 394714802
-                }
-              }
-            ]
+            "clientId": 533425689
           }
         },
-        "orders": [
-          {
-            "orderId": {
-              "subaccountId": {
-                "owner": "dydx1expvgcc4j9cqnag2yp4n0tzf4ejtxtgnpj928r"
-              },
-              "clientId": 394714802
+        {
+          "fillAmount": "1109000000",
+          "makerOrderId": {
+            "subaccountId": {
+              "owner": "dydx1q869gyjwanxhw5xdgfg67pg3y8gjeuzth6u6zl"
             },
-            "side": "SIDE_BUY",
-            "quantums": "764000000",
-            "subticks": "6847800000",
-            "goodTilBlock": 16451679,
-            "timeInForce": "TIME_IN_FORCE_POST_ONLY",
-            "clientMetadata": 2323185667
-          },
-          {
-            "orderId": {
-              "subaccountId": {
-                "owner": "dydx1dj2nd8lgadugrl98gd8cu9zltd2uz2jncpwny9"
-              },
-              "clientId": 1716570794
-            },
-            "side": "SIDE_SELL",
-            "quantums": "13000000",
-            "subticks": "6846900000",
-            "goodTilBlock": 16451672,
-            "timeInForce": "TIME_IN_FORCE_IOC"
+            "clientId": 1188620611
           }
-        ],
-        "fillAmounts": [
-          "13000000",
-          "13000000"
-        ]
-      }
+        },
+        {
+          "fillAmount": "3055000000",
+          "makerOrderId": {
+            "subaccountId": {
+              "owner": "dydx17z3prca48l3c93wtlfp69p25gze45uey57z667"
+            },
+            "clientId": 1796902745
+          }
+        }
+      ]
+    }
+  },
+  "orders": [
+    {
+      "orderId": {
+        "subaccountId": {
+          "owner": "dydx100l9m6g70j28g2tk3jj4plmge8vsmj6jdrlzhk",
+          "number": 1
+        },
+        "clientId": 533425689
+      },
+      "side": "SIDE_SELL",
+      "quantums": "1527000000",
+      "subticks": "6545800000",
+      "goodTilBlock": 18455236,
+      "timeInForce": "TIME_IN_FORCE_POST_ONLY"
+    },
+    {
+      "orderId": {
+        "subaccountId": {
+          "owner": "dydx1q869gyjwanxhw5xdgfg67pg3y8gjeuzth6u6zl"
+        },
+        "clientId": 1188620611
+      },
+      "side": "SIDE_SELL",
+      "quantums": "1109000000",
+      "subticks": "6545900000",
+      "goodTilBlock": 18455229,
+      "timeInForce": "TIME_IN_FORCE_POST_ONLY"
+    },
+    {
+      "orderId": {
+        "subaccountId": {
+          "owner": "dydx17z3prca48l3c93wtlfp69p25gze45uey57z667"
+        },
+        "clientId": 1796902745
+      },
+      "side": "SIDE_SELL",
+      "quantums": "3055000000",
+      "subticks": "6545900000",
+      "goodTilBlock": 18455227,
+      "timeInForce": "TIME_IN_FORCE_POST_ONLY"
+    },
+    {
+      "orderId": {
+        "subaccountId": {
+          "owner": "dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn"
+        },
+        "clientId": 1368487720
+      },
+      "side": "SIDE_BUY",
+      "quantums": "22368000000",
+      "subticks": "6546200000",
+      "goodTilBlock": 18455229,
+      "timeInForce": "TIME_IN_FORCE_IOC"
     }
   ],
-  "blockHeight": 16451664,
-  "execMode": 102
+  "fillAmounts": [
+    "1527000000",
+    "1109000000",
+    "3055000000",
+    "5691000000"
+  ]
 }
 """
+FILL_EXEC_MODE = 7
+CLOB_PAIR_ID = 0  # Assuming CLOB pair ID is 0 for this test
 
 
 class TestFills(unittest.TestCase):
     def test_parse_fill(self):
         # Construct a StreamOrderbookUpdatesResponse message from JSON
-        msg = StreamOrderbookUpdatesResponse()
+        msg = StreamOrderbookFill()
         json_format.Parse(FILL_JSON, msg)
 
         # Parse the fill
-        fills = parse_fill(msg.updates[0].order_fill, msg.exec_mode)
+        fills = parse_fill(msg, FILL_EXEC_MODE)
 
         # Define expected output
         expected_fills = [
             {
-                'clob_pair_id': 0,  # As the clob_pair_id is not explicitly given in the example
+                'clob_pair_id': CLOB_PAIR_ID,
                 'maker': {
-                    'owner_address': 'dydx1expvgcc4j9cqnag2yp4n0tzf4ejtxtgnpj928r',
-                    'subaccount_number': 0,
-                    'client_id': 394714802,
+                    'owner_address': 'dydx100l9m6g70j28g2tk3jj4plmge8vsmj6jdrlzhk',
+                    'subaccount_number': 1,
+                    'client_id': 533425689
                 },
                 'taker': {
-                    'owner_address': 'dydx1dj2nd8lgadugrl98gd8cu9zltd2uz2jncpwny9',
+                    'owner_address': 'dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn',
                     'subaccount_number': 0,
-                    'client_id': 1716570794,
+                    'client_id': 1368487720
                 },
-                'quantums': 13000000,
-                'subticks': 6847800000,
+                'maker_total_filled_quantums': Decimal('1527000000'),
+                'quantums': Decimal('1527000000'),
+                'subticks': Decimal('6545800000'),
                 'taker_is_buy': True,
-                'exec_mode': 102,
+                'exec_mode': FILL_EXEC_MODE,
+                'fill_type': FillType.NORMAL,
+            },
+            {
+                'clob_pair_id': CLOB_PAIR_ID,
+                'maker': {
+                    'owner_address': 'dydx1q869gyjwanxhw5xdgfg67pg3y8gjeuzth6u6zl',
+                    'subaccount_number': 0,
+                    'client_id': 1188620611
+                },
+                'taker': {
+                    'owner_address': 'dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn',
+                    'subaccount_number': 0,
+                    'client_id': 1368487720
+                },
+                'maker_total_filled_quantums': Decimal('1109000000'),
+                'quantums': Decimal('1109000000'),
+                'subticks': Decimal('6545900000'),
+                'taker_is_buy': True,
+                'exec_mode': FILL_EXEC_MODE,
+                'fill_type': FillType.NORMAL,
+            },
+            {
+                'clob_pair_id': CLOB_PAIR_ID,
+                'maker': {
+                    'owner_address': 'dydx17z3prca48l3c93wtlfp69p25gze45uey57z667',
+                    'subaccount_number': 0,
+                    'client_id': 1796902745
+                },
+                'taker': {
+                    'owner_address': 'dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn',
+                    'subaccount_number': 0,
+                    'client_id': 1368487720
+                },
+                'maker_total_filled_quantums': Decimal('3055000000'),
+                'quantums': Decimal('3055000000'),
+                'subticks': Decimal('6545900000'),
+                'taker_is_buy': True,
+                'exec_mode': FILL_EXEC_MODE,
                 'fill_type': FillType.NORMAL,
             }
         ]
@@ -116,6 +197,7 @@ class TestFills(unittest.TestCase):
             self.assertEqual(fill.taker.owner_address, expected_fill['taker']['owner_address'])
             self.assertEqual(fill.taker.subaccount_number, expected_fill['taker']['subaccount_number'])
             self.assertEqual(fill.taker.client_id, expected_fill['taker']['client_id'])
+            self.assertEqual(fill.maker_total_filled_quantums, expected_fill['maker_total_filled_quantums'])
             self.assertEqual(fill.quantums, expected_fill['quantums'])
             self.assertEqual(fill.subticks, expected_fill['subticks'])
             self.assertEqual(fill.taker_is_buy, expected_fill['taker_is_buy'])
