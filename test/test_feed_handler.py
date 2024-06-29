@@ -17,7 +17,8 @@ To record new sample messages, run this script with the flag `--record-to`, e.g.
 ## Live data test
 
 To start a long-running test that runs this test with live data, use the flag
-`--long-running-test` and specify a number of messages, e.g.
+`--long-running-test` and specify a number of seconds after which to query a
+snapshot, e.g.
 
     python test/test_feed_handler.py --long-running-test 100000
 
@@ -35,36 +36,34 @@ import os
 import sys
 import tempfile
 import unittest
-from typing import BinaryIO, Optional, List, Tuple
+from typing import Optional, List, Tuple
 
 import grpc
-# Classes generated from the proto files
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
 import src.config as config
+import src.serde as serde
 from src.feed_handler import FeedHandler
 
 
 class TestFeedHandler(unittest.TestCase):
     def setUp(self):
         # Load the snapshot at t1
-        snap, prev_msg = load_snapshot(asset_path('feed_from_t1.log'))
+        snap, prev_msg, idx = load_snapshot(asset_path('feed_from_t1.log'))
+        self.assertIsNotNone(idx, "snapshot not found in feed")
+        self.assertGreater(
+            idx,
+            0,
+            "this test only makes sense if the snapshot isn't the first message"
+        )
         self.snapshot_state = snap
 
         # Load the full feed from t0 through the message preceding the snapshot
         feed_path = asset_path('feed_from_t0.log')
-        start_time = datetime.datetime.now()
         feed_state, n_messages = load_feed_through_snapshot(feed_path, prev_msg)
-        end_time = datetime.datetime.now()
-
-        # Compute the time taken to process the messages
-        time_taken = end_time - start_time
-        print(f"Read, deserialized, and handled {n_messages} msgs "
-              f"in {time_taken.total_seconds()}s "
-              f"({n_messages / time_taken.total_seconds() // 1000}k msgs/s)")
 
         self.feed_state = feed_state
 
@@ -75,14 +74,24 @@ class TestFeedHandler(unittest.TestCase):
 
         # Check best bid and ask prices and sizes
         best_bid: lob.Order = next(self.snapshot_state.books[0].bids())
-        self.assertEqual(3032356319, best_bid.order_id.client_id)
-        self.assertEqual(1146000000, best_bid.quantums)
-        self.assertEqual(6759500000, best_bid.subticks)
+        self.assertEqual(130932877, best_bid.order_id.client_id)
+        self.assertEqual(500000000, best_bid.quantums)
+        self.assertEqual(6037200000, best_bid.subticks)
 
         best_ask: lob.Order = next(self.snapshot_state.books[0].asks())
-        self.assertEqual(1002750162, best_ask.order_id.client_id)
+        self.assertEqual(130932874, best_ask.order_id.client_id)
         self.assertEqual(30000000, best_ask.quantums)
-        self.assertEqual(6759600000, best_ask.subticks)
+        self.assertEqual(6037300000, best_ask.subticks)
+
+
+def asks_bids_from_feed(
+        f: FeedHandler,
+        clob_pair_id: int
+) -> Tuple[List[lob.Order], List[lob.Order]]:
+    book = f.books.get(clob_pair_id, None)
+    if not book:
+        return [], []
+    return list(book.asks()), list(book.bids())
 
 
 def assert_books_equal(feed_state_1: FeedHandler, feed_state_2: FeedHandler):
@@ -94,11 +103,8 @@ def assert_books_equal(feed_state_1: FeedHandler, feed_state_2: FeedHandler):
     clob_pair_ids.update(feed_state_2.books.keys())
 
     for clob_pair_id in clob_pair_ids:
-        feed_asks = list(feed_state_1.books[clob_pair_id].asks())
-        feed_bids = list(feed_state_1.books[clob_pair_id].bids())
-
-        snap_asks = list(feed_state_2.books[clob_pair_id].asks())
-        snap_bids = list(feed_state_2.books[clob_pair_id].bids())
+        feed_asks, feed_bids = asks_bids_from_feed(feed_state_1, clob_pair_id)
+        snap_asks, snap_bids = asks_bids_from_feed(feed_state_2, clob_pair_id)
 
         if snap_asks != feed_asks:
             debug_book_side(feed_asks, snap_asks)
@@ -138,23 +144,31 @@ def asset_path(filename: str) -> str:
     )
 
 
-def load_snapshot(path: str) -> Tuple[FeedHandler, StreamOrderbookUpdatesResponse]:
+def load_snapshot(path: str) -> Tuple[FeedHandler, StreamOrderbookUpdatesResponse, Optional[int]]:
     """
     Load the snapshot from the given log file and return the feed handler
-    state after processing the snapshot + the message that directly preceded
-    the snapshot.
-    """
-    snapshot = read_all_from_log(path)
+    state after processing the snapshot, the message that directly preceded
+    the snapshot, and the index of the first snapshot message.
 
+    If the snapshot is never seen or never transmitted completely, returns
+    None for the snapshot index.
+    """
+    snapshot = serde.read_all_from_log(path)
     # Use the feed handler to get the book state after the snapshot, and
     # also save the message just before the snapshot
     prev_msg = None
+    snapshot_idx = None
     snapshot_state = FeedHandler()
-    for msg in snapshot:
-        # Stop processing once the snapshot is seen
+    for idx, msg in enumerate(snapshot):
         is_snapshot = msg.updates[0].orderbook_update.snapshot
+
+        # Store the idx of the first snapshot message
+        if is_snapshot and snapshot_idx is None:
+            snapshot_idx = idx
+
+        # Stop processing once the snapshot is done processing
         if snapshot_state.has_seen_first_snapshot and not is_snapshot:
-            break
+            return snapshot_state, prev_msg, snapshot_idx
 
         # Save the message just before the snapshot
         if not is_snapshot:
@@ -162,7 +176,10 @@ def load_snapshot(path: str) -> Tuple[FeedHandler, StreamOrderbookUpdatesRespons
 
         snapshot_state.handle(msg)
 
-    return snapshot_state, prev_msg
+    # If we get here without passing through the snapshot, return None for
+    # snapshot idx, because the snapshot either wasn't seen or wasn't
+    # complete
+    return snapshot_state, prev_msg, None
 
 
 def load_feed_through_snapshot(
@@ -176,66 +193,21 @@ def load_feed_through_snapshot(
     feed_state = FeedHandler()
     n_messages = 0
     with open(path, 'rb') as log:
-        while (message := read_message_from_log(log)) is not None:
-            feed_state.handle(message)
+        while (x := serde.read_message_from_log(log)) is not None:
+            ts, msg = x
+            feed_state.handle(msg)
             n_messages += 1
-            if message == stop_at_msg:
+            if msg == stop_at_msg:
                 break
 
     return feed_state, n_messages
 
-
-def append_message_to_log(log: BinaryIO, message: StreamOrderbookUpdatesResponse):
-    """
-    Binary serialize the message and append it to the log file, prefixed by the
-    message length so that it can be read back in.
-    """
-    serialized_message = message.SerializeToString()
-    message_length = len(serialized_message)
-    log.write(message_length.to_bytes(4, byteorder='big'))
-    log.write(serialized_message)
-
-
-def read_message_from_log(log: BinaryIO) -> Optional[StreamOrderbookUpdatesResponse]:
-    """
-    Read a message from the log file, deserializing it from the binary format,
-    returning None if the end of the file is reached.
-    """
-    length_bytes = log.read(4)
-    if not length_bytes:
-        return None
-
-    message_length = int.from_bytes(length_bytes, byteorder='big')
-    serialized_message = log.read(message_length)
-    message = StreamOrderbookUpdatesResponse()
-    message.ParseFromString(serialized_message)
-    return message
-
-
-def read_all_from_log(path: str) -> List[StreamOrderbookUpdatesResponse]:
-    """
-    Read all messages from the log file and return them in a list.
-    """
-    msgs = []
-    with open(path, 'rb') as log:
-        while (message := read_message_from_log(log)) is not None:
-            msgs.append(message)
-    return msgs
-
-
-async def record_messages(
-        conf: dict,
-        path: str,
-        threshold_event: asyncio.Event,
-        message_threshold: int,
-):
+async def record_messages(conf: dict, path: str):
     """
     Record messages from the gRPC feed to a binary log file.
 
     :param conf: Connection configuration
     :param path: Path to the log file
-    :param threshold_event: Event to signal when message threshold is reached
-    :param message_threshold: Call stop_event.set() after this many messages
     """
     host = conf['dydx_full_node']['grpc_host']
     port = conf['dydx_full_node']['grpc_port']
@@ -249,12 +221,12 @@ async def record_messages(
                 stub = QueryStub(channel)
                 request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
                 async for response in stub.StreamOrderbookUpdates(request):
-                    append_message_to_log(log, response)
+                    response: StreamOrderbookUpdatesResponse
+                    ts = datetime.datetime.now()
+                    serde.append_message_to_log(log, response, ts)
                     n += 1
-                    if n % 1000 == 0:
-                        print(f"Recorded {n / 1000}k messages to {path}")
-                    if n >= message_threshold:
-                        threshold_event.set()
+                    if n % 100 == 0:
+                        print(f"Recorded {n} messages to {path}")
                 print("Stream ended")
             except grpc.aio.AioRpcError as e:
                 print(f"gRPC error occurred: {e.code()} - {e.details()}")
@@ -262,33 +234,25 @@ async def record_messages(
                 print(f"Unexpected error in stream: {e}")
 
 
-async def connect_and_collect_overlapping(conf: dict, parent: str, n_messages: int):
+async def connect_and_collect_overlapping(conf: dict, parent: str, n_seconds: int):
     """
-    1. Connect to the gRPC feed and collect `n_messages` messages.
-    2. Connect a second feed and collect 1000 messages concurrently.
+    1. Connect to the gRPC feed and collect messages for `n_seconds`.
+    2. Connect a second feed and collect messages for 3 seconds concurrently.
     3. Close both feeds.
     4. Return paths to the files log1, log2 inside the provided `dir`.
     """
     log1 = unique_path(parent, 'feed_from_t0.log')
     log2 = unique_path(parent, 'feed_from_t1.log')
 
-    # Event to signal when the first task reaches n messages
-    e = asyncio.Event()
-
     # Start recording the first set of messages
-    print(f"Recording {n_messages // 1000}k messages to {log1}")
-    task1 = asyncio.create_task(record_messages(conf, log1, e, n_messages))
-
-    await e.wait()
+    print(f"Recording messages to {log1} for {n_seconds} seconds")
+    task1 = asyncio.create_task(record_messages(conf, log1))
+    await asyncio.sleep(n_seconds)
 
     # Start recording the second set of messages concurrently
-    n = 1000
-    print(f"Recording {n // 1000}k messages to {log2}")
-    e2 = asyncio.Event()
-    task2 = asyncio.create_task(record_messages(conf, log2, e2, n))
-
-    # Wait for the second task to record 1000 messages
-    await e2.wait()
+    print(f"Recording snapshot on a different feed")
+    task2 = asyncio.create_task(record_messages(conf, log2))
+    await asyncio.sleep(3)
 
     # Cancel the tasks
     print("Seen enough messages, cancelling tasks...")
@@ -313,7 +277,11 @@ def unique_path(parent: str, base: str) -> str:
     Return a unique path inside the given directory by appending a number to
     the base name.
     """
-    n = 0
+    # Special case: if the base name doesn't exist, just go with that
+    if not os.path.exists(os.path.join(parent, base)):
+        return os.path.join(parent, base)
+
+    n = 1
     while os.path.exists(os.path.join(parent, f"{base}.{n}")):
         n += 1
     return os.path.join(parent, f"{base}.{n}")
@@ -330,16 +298,21 @@ def replay_test(feed_from_t0_path: str, feed_from_t1_path: str):
     :param feed_from_t0_path: Path to feed starting at t0 ending at t2
     :param feed_from_t1_path: Path to feed starting at t1 ending < t2
     """
-    snap, prev_msg = load_snapshot(feed_from_t1_path)
-    feed_state, n_messages = load_feed_through_snapshot(feed_from_t0_path, prev_msg)
-    assert_books_equal(feed_state, snap)
+    snap, prev_msg, idx = load_snapshot(feed_from_t1_path)
+    if idx is None:
+        print("No snapshot in feed, skipping test...")
+    elif idx == 0:
+        print("Snapshot was first message, skipping test...")
+    else:
+        feed_state, n_messages = load_feed_through_snapshot(feed_from_t0_path, prev_msg)
+        assert_books_equal(feed_state, snap)
 
 
-async def long_running_test(conf: dict, n_messages: int):
+async def long_running_test(conf: dict, n_seconds: int):
     while True:
         # Create a temporary directory
         with tempfile.TemporaryDirectory() as temp_dir:
-            l1, l2 = await connect_and_collect_overlapping(conf, temp_dir, n_messages)
+            l1, l2 = await connect_and_collect_overlapping(conf, temp_dir, n_seconds)
 
             # Check if the feeds line up
             try:
@@ -368,7 +341,7 @@ if __name__ == '__main__':
         c = config.load_yaml_config('config.yaml')
         print(f"Recording messages to '{sys.argv[2]}' with conf {c}")
         os.makedirs(sys.argv[2], exist_ok=True)
-        asyncio.run(connect_and_collect_overlapping(c, sys.argv[2], 100000))
+        asyncio.run(connect_and_collect_overlapping(c, sys.argv[2], 30))
     elif len(sys.argv) > 1 and sys.argv[1] == '--long-running-test':
         c = config.load_yaml_config('config.yaml')
         asyncio.run(long_running_test(c, int(sys.argv[2])))
