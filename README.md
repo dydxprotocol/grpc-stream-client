@@ -1,6 +1,7 @@
 Example Client for dYdX Full Node gRPC Streams
 
-Compatible with dYdX full nodes running [v4.1.3](https://github.com/dydxprotocol/v4-chain/releases/tag/protocol%2Fv4.1.3) (includes fills).
+Compatible with dYdX full nodes running [v5.0.5+](https://github.com/dydxprotocol/v4-chain/releases/tag/protocol%2Fv4.1.3) (includes fills).
+
 See the [v4.1.2-compatible tag](https://github.com/dydxprotocol/grpc-stream-client/tree/v4.1.2-compatible) for the version compatible with v4.1.2 (doesn't include fills, just book updates).
 
 ### Setup
