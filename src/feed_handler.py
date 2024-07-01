@@ -106,8 +106,6 @@ class FeedHandler:
         OffChainUpdateV1[2] messages + a flag indicating whether this is a
         snapshot.
 
-        Returns true if this message is a snapshot, false otherwise.
-
         [1] https://github.com/dydxprotocol/v4-chain/blob/432e711decf01b855cf5ca90b699c9b187399826/proto/dydxprotocol/clob/query.proto#L196-L207
         [2] https://github.com/dydxprotocol/v4-chain/blob/432e711decf01b855cf5ca90b699c9b187399826/proto/dydxprotocol/indexer/off_chain_updates/off_chain_updates.proto#L105-L114
         """
