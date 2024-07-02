@@ -20,7 +20,7 @@ CHECK_EVERY_N_BLOCKS = 25
 
 class FeedHandler:
 
-    def __init__(self, clob_pair_ids: dict[int, dict]):
+    def __init__(self, clob_pair_ids: list[int]):
         # Store order books by clob pair ID
         self.books: Dict[int, lob.LimitOrderBook] = {}
 
@@ -35,11 +35,16 @@ class FeedHandler:
 
         self.cpids = clob_pair_ids
 
-        # coroutine to fetch pcs snapshots every N blocks. Used to await the fetch.
+        # coroutine to fetch pcs snapshots every N blocks. Used to await a snapshot fetch call.
         self.fetched_snapshot_await = None
-        # pcs snapshot books
+        # snapshot of the books and it's height, fetched from a new grpc stream.
         self.last_snapshot_books: Dict[int, lob.LimitOrderBook] = {}
         self.last_snapshot_height: int = -1
+
+        # Local orderbook deepcopied during the end of PCS. Sync vars are for when each book is snapshotted.
+        self.last_pcs_books: Dict[int, lob.LimitOrderBook] = {}
+        self.last_pcs_books_height: Dict[int, int] = {}
+        self.last_pcs_events: Dict[int, asyncio.Event] = {k: asyncio.Event() for k in clob_pair_ids}
 
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
@@ -84,13 +89,17 @@ class FeedHandler:
             )
 
     def _update_exec_mode(self, clob_pair_id: int, new_exec_mode: int, block_height: int):
-        # pcs has transitioned out of 
+        #bool indicating if this clob pair id has just moved out of Prepare Check State.
         end_pcs = clob_pair_id in self.last_exec_modes and \
             self.last_exec_modes[clob_pair_id] == 102 and new_exec_mode != 102
 
-        # when a cpid's book transitions out of pcs, snapshot the book.
+        # deepcopy the book and unblock waiters.
         if end_pcs:
-            print(f"pcs ended for block {block_height}")
+            async_event_gather: asyncio.Event = self.last_pcs_events[clob_pair_id]
+            self.last_pcs_books[clob_pair_id] = deepcopy(self.books[clob_pair_id])
+            self.last_pcs_books_height[clob_pair_id] = block_height
+            async_event_gather.set()
+            async_event_gather.clear()
             if block_height % CHECK_EVERY_N_BLOCKS == 0 and clob_pair_id == 0:
                 # fetch the snapshot
                 self.fetched_snapshot_await = asyncio.create_task(
@@ -102,7 +111,7 @@ class FeedHandler:
                 print_books_task = asyncio.create_task(
                     self._check_last_pcs_correctness(
                         clob_pair_id,
-                        deepcopy(self.books[clob_pair_id]),
+                        async_event_gather,
                     )
                 )
         
@@ -279,29 +288,31 @@ class FeedHandler:
     async def _check_last_pcs_correctness(
         self, 
         cpid: int,
-        local_book: lob.LimitOrderBook,
+        event: asyncio.Event
     ):
         """
-        bluhhh
+        Awaits the new grpc stream's orderbook snapshot to be fetched. Awaits the block height to matchs.
+        Then, compares the local orderbook for a clob pair id against the fetched snapashot.
         """
-        # need to await the fetch of the snapshot
+        # need to await the fetch of the snapshot and the next block
         await self.fetched_snapshot_await
-        print(f"===COMPARING BOOKS CPID {cpid}=====")
-        print(f"heights local book {self.heights[cpid]}, snapshot {self.last_snapshot_height}")
+        await event.wait()
+        local_book = self.last_pcs_books[cpid]
+        local_book_height = self.last_pcs_books_height[cpid]
+        if local_book_height != self.last_snapshot_height:
+            print("SKIPPING: Mismatched heights for snapshot in validation client")
+            return
         snapshot_book = self.last_snapshot_books[cpid]
         snapshot_book.compare_books(local_book)
         lob.assert_books_equal(local_book, snapshot_book)
-        print("====finish")
 
     async def fetch_pcs_snapshot(self):
         """
-        bluhhh
+        Fetches the orderbook snapshot and sets the last snapshot book fields on this feed handler.
         """
-        print("fetching orderbook snapshot")
         books, height = await validation.fetch_orderbook_snapshot(self.cpids)
         self.last_snapshot_books = books
         self.last_snapshot_height = height
-        print(f"done fetchedorderbook snapshot height {self.last_snapshot_height}")
 
 def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:
     """
@@ -317,7 +328,6 @@ def generate_books_from_snapshot(
     clob_pair_ids: dict[int, dict],
     orderbook_update: StreamOrderbookUpdate,
 ) -> Dict[int, lob.LimitOrderBook]:
-    print("getting books from snapshot")
     feed_handler = FeedHandler(clob_pair_ids)
     if not orderbook_update.snapshot:
         raise Exception("Orderbook update must be snapshot")

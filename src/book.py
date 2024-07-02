@@ -154,10 +154,10 @@ def assert_books_equal(book_1: LimitOrderBook, book_2: LimitOrderBook):
 
     if snap_asks != feed_asks:
         debug_book_side(feed_asks, snap_asks)
-        # raise AssertionError(f"asks for book {clob_pair_id} do not match")
+        raise AssertionError(f"asks for book do not match")
     if snap_bids != feed_bids:
         debug_book_side(feed_bids, snap_bids)
-        # raise AssertionError(f"bids for book {clob_pair_id} do not match")
+        raise AssertionError(f"bids for book do not match")
 
 
 def debug_book_side(have_side: List[Order], expect_side: List[Order]):

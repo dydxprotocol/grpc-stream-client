@@ -46,7 +46,7 @@ async def listen_to_stream(
                 # Update the order book state and print any fills
                 try:
                     fill_events = feed_handler.handle(response)
-                    # print_fills(fill_events, cpid_to_market_info)
+                    print_fills(fill_events, cpid_to_market_info)
                 except Exception as e:
                     logging.error(f"Error handling message: {MessageToJson(e, indent=None)}")
                     raise e
@@ -155,13 +155,13 @@ async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
     # (adjust to use secure channel if needed)
     async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
         interval = conf['interval_ms']
-        # print_books_task = asyncio.create_task(
-        #     print_books_every_n_ms(
-        #         feed_handler,
-        #         cpid_to_market_info,
-        #         interval,
-        #     ),
-        # )
+        print_books_task = asyncio.create_task(
+            print_books_every_n_ms(
+                feed_handler,
+                cpid_to_market_info,
+                interval,
+            ),
+        )
         await asyncio.gather(
             listen_to_stream(
                 channel,
@@ -170,7 +170,7 @@ async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
                 feed_handler,
                 conf['log_stream_messages'],
             ),
-            # print_books_task,
+            print_books_task,
         )
 
 
