@@ -34,8 +34,9 @@ def query_market_info(indexer_api) -> dict[int, dict]:
     Each market info dict has keys `atomicResolution` and
     `quantumConversionExponent` for unit conversion.
     """
-    uri = f"{indexer_api}/v4/perpetualMarkets"
-    resp = requests.get(uri)
-    if resp.status_code != 200:
-        raise ValueError(f"Failed to query markets from {uri}: {resp.text}")
-    return {int(x['clobPairId']): x for _, x in resp.json()["markets"].items()}
+    # uri = f"{indexer_api}/v4/perpetualMarkets"
+    # resp = requests.get(uri)
+    # if resp.status_code != 200:
+    #     raise ValueError(f"Failed to query markets from {uri}: {resp.text}")
+    # return {int(x['clobPairId']): x for _, x in resp.json()["markets"].items()}
+    return {}

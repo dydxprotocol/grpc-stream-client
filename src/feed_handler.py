@@ -1,7 +1,11 @@
 """
 Handle messages on the gRPC book feed and build local order books.
 """
+from __future__ import annotations
 from typing import Dict, List
+from copy import deepcopy
+import asyncio
+import time
 
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, StreamOrderbookUpdate, \
     StreamOrderbookFill
@@ -10,20 +14,32 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 
 import src.book as lob
-from src import fills
+from src import fills, validation, helpers
 
+CHECK_EVERY_N_BLOCKS = 25
 
 class FeedHandler:
 
-    def __init__(self):
+    def __init__(self, clob_pair_ids: dict[int, dict]):
         # Store order books by clob pair ID
         self.books: Dict[int, lob.LimitOrderBook] = {}
 
         # Block heights by clob pair ID
         self.heights: Dict[int, int] = {}
 
+        # last exec mode seen by clob pair id
+        self.last_exec_modes: Dict[int, int] = {}
+
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
+
+        self.cpids = clob_pair_ids
+
+        # coroutine to fetch pcs snapshots every N blocks. Used to await the fetch.
+        self.fetched_snapshot_await = None
+        # pcs snapshot books
+        self.last_snapshot_books: Dict[int, lob.LimitOrderBook] = {}
+        self.last_snapshot_height: int = -1
 
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
@@ -41,11 +57,13 @@ class FeedHandler:
             update_type = update.WhichOneof('update_message')
             height = update.block_height
             if update_type == 'orderbook_update':
-                self._handle_orderbook_update(update.orderbook_update, height)
+                self._handle_orderbook_update(update.orderbook_update, height, update.exec_mode)
             elif update_type == 'order_fill':
                 fs = self._handle_fills(update.order_fill, update.exec_mode)
                 if fs:  # No fills parsed before snapshot
                     self._update_height(fs[0].clob_pair_id, height)
+                    # update the exec mode for this clob pair
+                    self._update_exec_mode(fs[0].clob_pair_id, update.exec_mode, height)
                 collected_fills += fs
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
@@ -64,6 +82,31 @@ class FeedHandler:
                 f"Block height decreased from "
                 f"{self.heights[clob_pair_id]} to {new_block_height}"
             )
+
+    def _update_exec_mode(self, clob_pair_id: int, new_exec_mode: int, block_height: int):
+        # pcs has transitioned out of 
+        end_pcs = clob_pair_id in self.last_exec_modes and \
+            self.last_exec_modes[clob_pair_id] == 102 and new_exec_mode != 102
+
+        # when a cpid's book transitions out of pcs, snapshot the book.
+        if end_pcs:
+            print(f"pcs ended for block {block_height}")
+            if block_height % CHECK_EVERY_N_BLOCKS == 0 and clob_pair_id == 0:
+                # fetch the snapshot
+                self.fetched_snapshot_await = asyncio.create_task(
+                    self.fetch_pcs_snapshot()
+            )
+
+            if block_height % CHECK_EVERY_N_BLOCKS == 0:
+                # kickoff task to check a certain clob pair id's correctness.
+                print_books_task = asyncio.create_task(
+                    self._check_last_pcs_correctness(
+                        clob_pair_id,
+                        deepcopy(self.books[clob_pair_id]),
+                    )
+                )
+        
+        self.last_exec_modes[clob_pair_id] = new_exec_mode
 
     def _handle_fills(
             self,
@@ -99,7 +142,8 @@ class FeedHandler:
     def _handle_orderbook_update(
             self,
             update: StreamOrderbookUpdate,
-            block_height: int
+            block_height: int,
+            exec_mode: int
     ):
         """
         Handle the StreamOrderBookUpdate message[1], which is a series of
@@ -125,7 +169,10 @@ class FeedHandler:
             u: OffChainUpdateV1
             update_type = u.WhichOneof('update_message')
 
-            cpid = None
+            cpid = helpers.get_clob_pair_id_from_offchain_update(u)
+            self._update_height(cpid, block_height)
+            self._update_exec_mode(cpid, exec_mode, block_height)
+
             if update_type == 'order_place':
                 cpid = self._handle_order_place(u.order_place)
             elif update_type == 'order_update':
@@ -134,8 +181,6 @@ class FeedHandler:
                 cpid = self._handle_order_remove(u.order_remove)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {u}")
-
-            self._update_height(cpid, block_height)
 
         self._validate_books()
 
@@ -231,6 +276,32 @@ class FeedHandler:
             raise AssertionError(f"Order {oid} not in the book")
         return clob_pair_id
 
+    async def _check_last_pcs_correctness(
+        self, 
+        cpid: int,
+        local_book: lob.LimitOrderBook,
+    ):
+        """
+        bluhhh
+        """
+        # need to await the fetch of the snapshot
+        await self.fetched_snapshot_await
+        print(f"===COMPARING BOOKS CPID {cpid}=====")
+        print(f"heights local book {self.heights[cpid]}, snapshot {self.last_snapshot_height}")
+        snapshot_book = self.last_snapshot_books[cpid]
+        snapshot_book.compare_books(local_book)
+        lob.assert_books_equal(local_book, snapshot_book)
+        print("====finish")
+
+    async def fetch_pcs_snapshot(self):
+        """
+        bluhhh
+        """
+        print("fetching orderbook snapshot")
+        books, height = await validation.fetch_orderbook_snapshot(self.cpids)
+        self.last_snapshot_books = books
+        self.last_snapshot_height = height
+        print(f"done fetchedorderbook snapshot height {self.last_snapshot_height}")
 
 def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:
     """
@@ -241,3 +312,14 @@ def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:
         subaccount_number=oid_fields.subaccount_id.number,
         client_id=oid_fields.client_id,
     )
+
+def generate_books_from_snapshot(
+    clob_pair_ids: dict[int, dict],
+    orderbook_update: StreamOrderbookUpdate,
+) -> Dict[int, lob.LimitOrderBook]:
+    print("getting books from snapshot")
+    feed_handler = FeedHandler(clob_pair_ids)
+    if not orderbook_update.snapshot:
+        raise Exception("Orderbook update must be snapshot")
+    feed_handler._handle_orderbook_update(orderbook_update, 10, 10)
+    return feed_handler.books

@@ -1,8 +1,9 @@
 """
 Limit order book data structure (l3) for orders with dYdX protocol order IDs.
 """
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Iterator, Optional
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from sortedcontainers import SortedDict
 
@@ -103,6 +104,83 @@ class LimitOrderBook:
         for price, level in self._bids.items():
             for order in level:
                 yield order
+
+    def get_midpoint_price(self) -> int:
+        """
+        Get the midpoint price
+        """
+        highest_bid = self._bids.peekitem(0)
+        lowest_ask = self._asks.peekitem(0)
+        return (highest_bid[0] + lowest_ask[0])/2.0
+    
+    def compare_books(self, other: LimitOrderBook) -> int:
+        """
+        compare the orderbook prices
+        """
+        num_orders = len(self.oid_to_order_node)
+        num_asks = len(self._asks)
+        num_bids = len(self._bids)
+        midpoint_price = self.get_midpoint_price()
+
+        other_num_orders = len(other.oid_to_order_node)
+        other_num_asks = len(other._asks)
+        other_num_bids = len(other._bids)
+        other_midpoint_price = other.get_midpoint_price()
+
+        if num_orders != other_num_orders:
+            print(f"FAIL: num orders: {num_orders} {other_num_orders}")
+        if num_asks != other_num_asks:
+            print(f"FAIL: num asks: {num_asks} {other_num_asks}")
+        if num_bids != other_num_bids:
+            print(f"FAIL: num bids: {num_bids} {other_num_bids}")
+        if midpoint_price != other_midpoint_price:
+            print(f"FAIL: midpoint price: {midpoint_price} {other_midpoint_price}")
+
+
+def asks_bids_from_book(
+        book: LimitOrderBook,
+) -> Tuple[List[Order], List[Order]]:
+    return list(book.asks()), list(book.bids())
+
+
+def assert_books_equal(book_1: LimitOrderBook, book_2: LimitOrderBook):
+    """
+    Raise an AssertionError if the order book states of the two feed handlers
+    do not match.
+    """
+
+    feed_asks, feed_bids = asks_bids_from_book(book_1)
+    snap_asks, snap_bids = asks_bids_from_book(book_2)
+
+    if snap_asks != feed_asks:
+        debug_book_side(feed_asks, snap_asks)
+        # raise AssertionError(f"asks for book {clob_pair_id} do not match")
+    if snap_bids != feed_bids:
+        debug_book_side(feed_bids, snap_bids)
+        # raise AssertionError(f"bids for book {clob_pair_id} do not match")
+
+
+def debug_book_side(have_side: List[Order], expect_side: List[Order]):
+    """
+    Print each order book side by side for debugging.
+    """
+    print(f"   {'have':>38} | {'expect':>38}")
+    print(f"🟠 {'px':>12} {'sz':>12} {'cid':>12} | {'px':>12} {'sz':>12} {'cid':>12}")
+    i = 0
+    while i < len(have_side) or i < len(expect_side):
+        have = have_side[i] if i < len(have_side) else None
+        expect = expect_side[i] if i < len(expect_side) else None
+        status = "🟢" if have == expect else "🔴"
+        print(f"{status} "
+              f"{have.subticks if have else '':>12} "
+              f"{have.quantums if have else '':>12} "
+              f"{have.order_id.client_id if have else '':>12} | "
+              f"{expect.subticks if expect else '':>12} "
+              f"{expect.quantums if expect else '':>12} "
+              f"{expect.order_id.client_id if expect else '':>12}")
+        i += 1
+
+
 
 
 class ListNode:

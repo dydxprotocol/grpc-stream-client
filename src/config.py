@@ -9,8 +9,32 @@ GRPC_OPTIONS = [
     ("grpc.http2.min_ping_interval_without_data_ms", 3000,),  # Minimum allowed time between pings with no data
 ]
 
-
 def load_yaml_config(path):
+    print("FINISHED LOADING CONFIG")
     with open(path, 'r') as file:
         config = yaml.safe_load(file)
     return config
+
+# singleton class
+class Config(object):
+    def __new__(cls,):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super(Config, cls).__new__(cls)
+        return cls.instance
+  
+    def __init__(self):
+        self.config = {}
+        with open("config.yaml", 'r') as file:
+            config = yaml.safe_load(file)
+            self.config = config
+
+    def get_config(self):
+        return self.config
+
+def get_addr_and_cpids():
+    config = Config().get_config()
+    host = config['dydx_full_node']['grpc_host']
+    port = config['dydx_full_node']['grpc_port']
+    cpids = config['stream_options']['clob_pair_ids']
+    addr = f"{host}:{port}"
+    return addr, cpids
