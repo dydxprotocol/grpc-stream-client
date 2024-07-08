@@ -13,7 +13,7 @@ from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest, 
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
-import src.feed_handler as feed_handler
+import src.validation_feed_handler as validation_feed_handler
 import src.config as config
 
 
@@ -33,13 +33,11 @@ async def fetch_orderbook_snapshot(
             stub = QueryStub(channel)
             request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
             async for response in stub.StreamOrderbookUpdates(request):
-                # Log the message
                 response: StreamOrderbookUpdatesResponse = response
                 for update in response.updates:
                     update_type = update.WhichOneof('update_message')
                     if update_type == 'orderbook_update' and update.orderbook_update.snapshot:
-                        print("obtained snapshot")
-                        return feed_handler.generate_books_from_snapshot(
+                        return validation_feed_handler.generate_books_from_snapshot(
                             clob_pair_ids,
                             update.orderbook_update
                         ), update.block_height

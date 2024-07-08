@@ -337,13 +337,12 @@ async def long_running_test(conf: dict, n_seconds: int):
 
 
 if __name__ == '__main__':
+    c = config.Config().get_config()
     if len(sys.argv) > 1 and sys.argv[1] == '--record-to':
-        c = config.load_yaml_config('config.yaml')
         print(f"Recording messages to '{sys.argv[2]}' with conf {c}")
         os.makedirs(sys.argv[2], exist_ok=True)
         asyncio.run(connect_and_collect_overlapping(c, sys.argv[2], 30))
     elif len(sys.argv) > 1 and sys.argv[1] == '--long-running-test':
-        c = config.load_yaml_config('config.yaml')
         asyncio.run(long_running_test(c, int(sys.argv[2])))
     elif len(sys.argv) > 1 and sys.argv[1] == '--replay-from':
         replay_test(sys.argv[2], sys.argv[3])

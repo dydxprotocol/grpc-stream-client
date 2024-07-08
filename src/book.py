@@ -2,6 +2,8 @@
 Limit order book data structure (l3) for orders with dYdX protocol order IDs.
 """
 from __future__ import annotations
+import logging
+
 from dataclasses import dataclass
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -113,9 +115,9 @@ class LimitOrderBook:
         lowest_ask = self._asks.peekitem(0)
         return (highest_bid[0] + lowest_ask[0])/2.0
     
-    def compare_books(self, other: LimitOrderBook) -> int:
+    def compare_books(self, other: LimitOrderBook):
         """
-        compare the orderbook prices
+        Compares the two orderbooks. Prints out any inconsistencies
         """
         num_orders = len(self.oid_to_order_node)
         num_asks = len(self._asks)
@@ -128,14 +130,21 @@ class LimitOrderBook:
         other_midpoint_price = other.get_midpoint_price()
 
         if num_orders != other_num_orders:
-            print(f"FAIL: num orders: {num_orders} {other_num_orders}")
+            logging.error(f"FAIL: num orders: {num_orders} {other_num_orders}")
         if num_asks != other_num_asks:
-            print(f"FAIL: num asks: {num_asks} {other_num_asks}")
+            logging.error(f"FAIL: num asks: {num_asks} {other_num_asks}")
         if num_bids != other_num_bids:
-            print(f"FAIL: num bids: {num_bids} {other_num_bids}")
+            logging.error(f"FAIL: num bids: {num_bids} {other_num_bids}")
         if midpoint_price != other_midpoint_price:
-            print(f"FAIL: midpoint price: {midpoint_price} {other_midpoint_price}")
-
+            logging.error(f"FAIL: midpoint price: {midpoint_price} {other_midpoint_price}")
+        for level, dll in self._asks.items():
+            other_dll = other._asks[level]
+            if not dll.is_equal(other_dll):
+                logging.error(f"FAIL: Asks Price level {level} mismatching orders")
+        for level, dll in self._bids.items():
+            other_dll = other._bids[level]
+            if not dll.is_equal(other_dll):
+                logging.error(f"FAIL: Bids Price level {level} mismatching orders")
 
 def asks_bids_from_book(
         book: LimitOrderBook,
@@ -229,6 +238,19 @@ class DoublyLinkedList:
             self.tail = node_to_remove.prev
 
         node_to_remove.prev = node_to_remove.next = None
+
+    def is_equal(self, other: DoublyLinkedList) -> bool:
+        """
+        Compares elements in two Doubly Linked Lists.
+        """
+        if len(self) != len(other):
+            return False
+        my_list = list(self)
+        other_list = list(other)
+        for my_elem, other_elem in zip(my_list, other_list):
+            if my_elem != other_elem:
+                return False
+        return True
 
     def __len__(self):
         return len([x for x in self])

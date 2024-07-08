@@ -9,13 +9,7 @@ GRPC_OPTIONS = [
     ("grpc.http2.min_ping_interval_without_data_ms", 3000,),  # Minimum allowed time between pings with no data
 ]
 
-def load_yaml_config(path):
-    print("FINISHED LOADING CONFIG")
-    with open(path, 'r') as file:
-        config = yaml.safe_load(file)
-    return config
-
-# singleton class
+# Singleton class to load configs
 class Config(object):
     def __new__(cls,):
         if not hasattr(cls, 'instance'):
