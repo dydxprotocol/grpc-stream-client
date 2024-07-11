@@ -9,6 +9,7 @@ GRPC_OPTIONS = [
     ("grpc.http2.min_ping_interval_without_data_ms", 3000,),  # Minimum allowed time between pings with no data
 ]
 
+
 # Singleton class to load configs
 class Config(object):
     def __new__(cls,):

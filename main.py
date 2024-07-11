@@ -25,6 +25,7 @@ from src.market_info import query_market_info, quantums_to_size, subticks_to_pri
 
 conf = config.Config().get_config()
 
+
 async def listen_to_stream(
         channel: grpc.Channel,
         clob_pair_ids: List[int],
@@ -38,6 +39,7 @@ async def listen_to_stream(
     fills that occur.
     """
     logging.info("Starting to listen to the stream")
+
     try:
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)

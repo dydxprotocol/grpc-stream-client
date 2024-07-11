@@ -190,8 +190,6 @@ def debug_book_side(have_side: List[Order], expect_side: List[Order]):
         i += 1
 
 
-
-
 class ListNode:
     """
     A node in a doubly linked list.
