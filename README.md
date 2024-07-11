@@ -54,7 +54,7 @@ Example output:
 
 ### Print gRPC Messages Example
     
-    python examples/print_feed_as_json.py
+    python example/print_feed_as_json.py
 
 
 ### Unit Tests
