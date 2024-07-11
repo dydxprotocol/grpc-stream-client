@@ -1,4 +1,5 @@
 Example Client for dYdX Full Node gRPC Streams
+---
 
 Compatible with dYdX full nodes running [v5.0.5+](https://github.com/dydxprotocol/v4-chain/releases/tag/protocol%2Fv5.0.5) (includes fills).
 
@@ -7,9 +8,15 @@ Compatible with dYdX full nodes running [v5.0.5+](https://github.com/dydxprotoco
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
+    vim config.yaml # Add your full node address etc.
 
 You first need a full node with [gRPC streaming enabled](https://docs.dydx.exchange/validators/full_node_streaming#enabling-grpc-streaming). 
 Add the full node address to the `config.yaml` file.
+
+### Logic
+
+See [main.py](main.py) and [src/feed_handler.py](src/feed_handler.py) for an example of 
+how messages are used to update the book state.
 
 ### Book Streaming Example
 
