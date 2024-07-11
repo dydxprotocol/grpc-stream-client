@@ -36,6 +36,6 @@ async def main(conf: dict):
 
 
 if __name__ == "__main__":
-    c = config.load_yaml_config('config.yaml')
+    c = config.Config().get_config()
     print("Starting with conf:", c)
     asyncio.run(main(c))

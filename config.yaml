@@ -8,3 +8,6 @@ stream_options:
 interval_ms: 1000 # Print book state every second
 indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversions
 log_stream_messages: feed.log # Log messages to this file each time main is run
+print_fills: false # Whether or not to print fills
+print_books: false # Whether or not to print books
+validate_every_n_blocks: 25 # In validation mode, how many blocks between each orderbook check

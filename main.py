@@ -4,6 +4,7 @@ along with trades whenever they occur.
 
 Logs all messages in JSON format to the path specified in config.yaml.
 """
+import argparse
 import asyncio
 import itertools
 import logging
@@ -18,8 +19,11 @@ from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 import src.book as lob
 import src.config as config
 import src.fills as fills
-from src.feed_handler import FeedHandler
+from src.feed_handler import FeedHandler, StandardFeedHandler
+from src.validation_feed_handler import ValidationFeedHandler
 from src.market_info import query_market_info, quantums_to_size, subticks_to_price
+
+conf = config.Config().get_config()
 
 
 async def listen_to_stream(
@@ -34,6 +38,8 @@ async def listen_to_stream(
     `feed_handler` to keep track of the order book state. Print any
     fills that occur.
     """
+    logging.info("Starting to listen to the stream")
+
     try:
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
@@ -45,7 +51,8 @@ async def listen_to_stream(
                 # Update the order book state and print any fills
                 try:
                     fill_events = feed_handler.handle(response)
-                    print_fills(fill_events, cpid_to_market_info)
+                    if conf['print_fills']:
+                        print_fills(fill_events, cpid_to_market_info)
                 except Exception as e:
                     logging.error(f"Error handling message: {MessageToJson(e, indent=None)}")
                     raise e
@@ -93,7 +100,7 @@ async def print_books_every_n_ms(
     """
     while True:
         await asyncio.sleep(ms / 1000)
-        for clob_pair_id, book in feed_handler.books.items():
+        for clob_pair_id, book in feed_handler.get_books().items():
             info = cpid_to_market_info[clob_pair_id]
             print(f"Book for CLOB pair {clob_pair_id} ({info['ticker']}):")
             pretty_print_book(
@@ -141,27 +148,23 @@ def pretty_print_book(
     print()
 
 
-async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
+async def main(args: dict, cpid_to_market_info: dict[int, dict]):
     host = conf['dydx_full_node']['grpc_host']
     port = conf['dydx_full_node']['grpc_port']
     cpids = conf['stream_options']['clob_pair_ids']
     addr = f"{host}:{port}"
 
     # This manages order book state
-    feed_handler = FeedHandler()
+    feed_handler: FeedHandler = StandardFeedHandler()
+    if args['validation_mode']:
+        logging.info("Starting GRPC Client in Validation Mode")
+        feed_handler = ValidationFeedHandler(cpids)
 
     # Connect to the gRPC feed and start listening
     # (adjust to use secure channel if needed)
     async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
         interval = conf['interval_ms']
-        print_books_task = asyncio.create_task(
-            print_books_every_n_ms(
-                feed_handler,
-                cpid_to_market_info,
-                interval,
-            ),
-        )
-        await asyncio.gather(
+        tasks = [
             listen_to_stream(
                 channel,
                 cpids,
@@ -169,7 +172,19 @@ async def main(conf: dict, cpid_to_market_info: dict[int, dict]):
                 feed_handler,
                 conf['log_stream_messages'],
             ),
-            print_books_task,
+        ]
+        if conf['print_books']:
+            print_books_task = asyncio.create_task(
+                print_books_every_n_ms(
+                    feed_handler,
+                    cpid_to_market_info,
+                    interval,
+                ),
+            )
+            tasks.append(print_books_task)
+
+        await asyncio.gather(
+            *tasks
         )
 
 
@@ -179,10 +194,17 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
 
-    c = config.load_yaml_config("config.yaml")
-    logging.info(f"Starting with conf: {c}")
+    parser = argparse.ArgumentParser(description='Sample GRPC Client for Full Node Streaming')
+    parser.add_argument(
+        '--validation-mode',
+        action='store_true',
+        help='when supplied, client will be started in validation mode'
+    )
+    args = parser.parse_args()
 
-    id_to_info = query_market_info(c['indexer_api'])
+    logging.info(f"Starting with conf: {conf}")
+
+    id_to_info = query_market_info(conf['indexer_api'])
     logging.info(f"Got market info: {id_to_info}")
 
-    asyncio.run(main(c, id_to_info))
+    asyncio.run(main(vars(args), id_to_info))
