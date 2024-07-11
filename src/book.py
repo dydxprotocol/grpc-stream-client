@@ -38,6 +38,7 @@ class LimitOrderBook:
 
     Insertion is O(log(N)), removal and update are O(1).
     """
+
     def __init__(self):
         self.oid_to_order_node: Dict[OrderId, ListNode] = {}
         self._asks: SortedDict[int, DoublyLinkedList] = SortedDict()
@@ -113,8 +114,8 @@ class LimitOrderBook:
         """
         highest_bid = self._bids.peekitem(0)
         lowest_ask = self._asks.peekitem(0)
-        return (highest_bid[0] + lowest_ask[0])/2.0
-    
+        return (highest_bid[0] + lowest_ask[0]) / 2.0
+
     def compare_books(self, other: LimitOrderBook):
         """
         Compares the two orderbooks. Prints out any inconsistencies
@@ -146,9 +147,8 @@ class LimitOrderBook:
             if not dll.is_equal(other_dll):
                 logging.error(f"FAIL: Bids Price level {level} mismatching orders")
 
-def asks_bids_from_book(
-        book: LimitOrderBook,
-) -> Tuple[List[Order], List[Order]]:
+
+def asks_bids_from_book(book: LimitOrderBook,) -> Tuple[List[Order], List[Order]]:
     return list(book.asks()), list(book.bids())
 
 
@@ -194,6 +194,7 @@ class ListNode:
     """
     A node in a doubly linked list.
     """
+
     def __init__(self, data):
         self.data = data
         self.prev = None
@@ -204,6 +205,7 @@ class DoublyLinkedList:
     """
     A doubly linked list with O(1) append and remove operations.
     """
+
     def __init__(self):
         self.head = None
         self.tail = None

@@ -20,7 +20,7 @@ To start a long-running test that runs this test with live data, use the flag
 `--long-running-test` and specify a number of seconds after which to query a
 snapshot, e.g.
 
-    python test/test_feed_handler.py --long-running-test 100000
+    python test/test_feed_handler.py --long-running-test 10
 
 It will use the config in `config.yaml` to connect to the gRPC feed and record
 messages to a temporary directory until seeing number specified.
@@ -46,7 +46,7 @@ from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 import src.book as lob
 import src.config as config
 import src.serde as serde
-from src.feed_handler import FeedHandler
+from src.feed_handler import StandardFeedHandler
 
 
 class TestFeedHandler(unittest.TestCase):
@@ -85,54 +85,33 @@ class TestFeedHandler(unittest.TestCase):
 
 
 def asks_bids_from_feed(
-        f: FeedHandler,
+        f: StandardFeedHandler,
         clob_pair_id: int
 ) -> Tuple[List[lob.Order], List[lob.Order]]:
-    book = f.books.get(clob_pair_id, None)
+    book = f.get_books().get(clob_pair_id, None)
     if not book:
         return [], []
     return list(book.asks()), list(book.bids())
 
 
-def assert_books_equal(feed_state_1: FeedHandler, feed_state_2: FeedHandler):
+def assert_books_equal(feed_state_1: StandardFeedHandler, feed_state_2: StandardFeedHandler):
     """
     Raise an AssertionError if the order book states of the two feed handlers
     do not match.
     """
-    clob_pair_ids = set(feed_state_1.books.keys())
-    clob_pair_ids.update(feed_state_2.books.keys())
+    clob_pair_ids = set(feed_state_1.get_books().keys())
+    clob_pair_ids.update(feed_state_2.get_books().keys())
 
     for clob_pair_id in clob_pair_ids:
         feed_asks, feed_bids = asks_bids_from_feed(feed_state_1, clob_pair_id)
         snap_asks, snap_bids = asks_bids_from_feed(feed_state_2, clob_pair_id)
 
         if snap_asks != feed_asks:
-            debug_book_side(feed_asks, snap_asks)
+            lob.debug_book_side(feed_asks, snap_asks)
             raise AssertionError(f"asks for book {clob_pair_id} do not match")
         if snap_bids != feed_bids:
-            debug_book_side(feed_bids, snap_bids)
+            lob.debug_book_side(feed_bids, snap_bids)
             raise AssertionError(f"bids for book {clob_pair_id} do not match")
-
-
-def debug_book_side(have_side: List[lob.Order], expect_side: List[lob.Order]):
-    """
-    Print each order book side by side for debugging.
-    """
-    print(f"   {'have':>38} | {'expect':>38}")
-    print(f"🟠 {'px':>12} {'sz':>12} {'cid':>12} | {'px':>12} {'sz':>12} {'cid':>12}")
-    i = 0
-    while i < len(have_side) or i < len(expect_side):
-        have = have_side[i] if i < len(have_side) else None
-        expect = expect_side[i] if i < len(expect_side) else None
-        status = "🟢" if have == expect else "🔴"
-        print(f"{status} "
-              f"{have.subticks if have else '':>12} "
-              f"{have.quantums if have else '':>12} "
-              f"{have.order_id.client_id if have else '':>12} | "
-              f"{expect.subticks if expect else '':>12} "
-              f"{expect.quantums if expect else '':>12} "
-              f"{expect.order_id.client_id if expect else '':>12}")
-        i += 1
 
 
 def asset_path(filename: str) -> str:
@@ -144,7 +123,7 @@ def asset_path(filename: str) -> str:
     )
 
 
-def load_snapshot(path: str) -> Tuple[FeedHandler, StreamOrderbookUpdatesResponse, Optional[int]]:
+def load_snapshot(path: str) -> Tuple[StandardFeedHandler, StreamOrderbookUpdatesResponse, Optional[int]]:
     """
     Load the snapshot from the given log file and return the feed handler
     state after processing the snapshot, the message that directly preceded
@@ -158,7 +137,7 @@ def load_snapshot(path: str) -> Tuple[FeedHandler, StreamOrderbookUpdatesRespons
     # also save the message just before the snapshot
     prev_msg = None
     snapshot_idx = None
-    snapshot_state = FeedHandler()
+    snapshot_state = StandardFeedHandler()
     for idx, msg in enumerate(snapshot):
         is_snapshot = msg.updates[0].orderbook_update.snapshot
 
@@ -185,12 +164,12 @@ def load_snapshot(path: str) -> Tuple[FeedHandler, StreamOrderbookUpdatesRespons
 def load_feed_through_snapshot(
         path: str,
         stop_at_msg: StreamOrderbookUpdatesResponse
-) -> Tuple[FeedHandler, int]:
+) -> Tuple[StandardFeedHandler, int]:
     """
     Load the feed from the given log file through the `stop_at_msg` (inclusive)
     and return the feed handler state + number of messages processed.
     """
-    feed_state = FeedHandler()
+    feed_state = StandardFeedHandler()
     n_messages = 0
     with open(path, 'rb') as log:
         while (x := serde.read_message_from_log(log)) is not None:
@@ -201,6 +180,7 @@ def load_feed_through_snapshot(
                 break
 
     return feed_state, n_messages
+
 
 async def record_messages(conf: dict, path: str):
     """
