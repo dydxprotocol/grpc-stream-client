@@ -25,11 +25,11 @@ class Fill:
     maker: lob.OrderId  # No client id if deleveraging
     taker: lob.OrderId  # No client id if liquidation or deleveraging
     quantums: int  # Integer amount filled (needs conversion to decimal)
-    maker_total_filled_quantums: int # *Total* integer amount the maker has filled
     subticks: int  # Integer price of the fill (needs conversion to decimal)
     taker_is_buy: bool  # True if the taker is buying, False if selling
     exec_mode: int  # 7 if the fill is finalized by consensus (otherwise node is just guessing)
     fill_type: FillType
+    maker_total_filled_quantums: int = 0  # *Total* integer amount the maker has filled
 
 
 def parse_fill(order_fill: StreamOrderbookFill, exec_mode: int) -> List[Fill]:
@@ -61,10 +61,8 @@ def parse_fill(order_fill: StreamOrderbookFill, exec_mode: int) -> List[Fill]:
         return parse_fills(exec_mode, clob_match, order_states_at_fill_time)
     elif match_type == 'match_perpetual_liquidation':
         return parse_liquidations(exec_mode, clob_match, order_states_at_fill_time)
-    # TODO: Deleveraging fills are not yet emitted by the full node
     elif match_type == 'match_perpetual_deleveraging':
-        raise AssertionError('Deleveraging fills are not yet emitted by the full node')
-    #     return parse_deleveragings(exec_mode, clob_match)
+        return parse_deleveragings(exec_mode, clob_match)
 
 
 def parse_pb_id(oid: OrderId) -> lob.OrderId:
