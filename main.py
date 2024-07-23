@@ -8,12 +8,15 @@ import argparse
 import asyncio
 import itertools
 import logging
+import websockets
 from typing import List
 
 import grpc
-from google.protobuf.json_format import MessageToJson
+from google.protobuf import json_format
+
 # Classes generated from the proto files
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest,\
+StreamOrderbookUpdatesResponse
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
@@ -26,7 +29,7 @@ from src.market_info import query_market_info, quantums_to_size, subticks_to_pri
 conf = config.Config().get_config()
 
 
-async def listen_to_stream(
+async def listen_to_grpc_stream(
         channel: grpc.Channel,
         clob_pair_ids: List[int],
         cpid_to_market_info: dict[int, dict],
@@ -38,7 +41,7 @@ async def listen_to_stream(
     `feed_handler` to keep track of the order book state. Print any
     fills that occur.
     """
-    logging.info("Starting to listen to the stream")
+    logging.info("Starting to listen to the grpc stream")
 
     try:
         stub = QueryStub(channel)
@@ -46,15 +49,14 @@ async def listen_to_stream(
         with open(log_path, 'w') as log:
             async for response in stub.StreamOrderbookUpdates(request):
                 # Log the message
-                log.write(MessageToJson(response, indent=None) + '\n')
-
+                log.write(json_format.MessageToJson(response, indent=None) + '\n')
                 # Update the order book state and print any fills
                 try:
                     fill_events = feed_handler.handle(response)
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
                 except Exception as e:
-                    logging.error(f"Error handling message: {MessageToJson(e, indent=None)}")
+                    logging.error(f"Error handling message: {json_format.MessageToJson(e, indent=None)}")
                     raise e
         logging.error("Stream ended")
     except grpc.aio.AioRpcError as e:
@@ -62,6 +64,43 @@ async def listen_to_stream(
         raise e
     except Exception as e:
         logging.error(f"Unexpected error in stream: {e}")
+        raise e
+
+async def listen_to_websocket(
+        websocket: websockets.WebSocketClientProtocol,
+        cpid_to_market_info: dict[int, dict],
+        feed_handler: FeedHandler,
+        log_path: str,
+):
+    """
+    Subscribe to the websocket of order book updates and use the
+    `feed_handler` to keep track of the order book state. Print any
+    fills that occur.
+    """
+    logging.info("Starting to listen to the websocket")
+
+    try:
+        with open(log_path, 'w') as log:
+            async for message in websocket:
+                # Parse the incoming data into a protobuf object
+                response = StreamOrderbookUpdatesResponse()
+                json_format.Parse(message, response)
+                # Log the message
+                log.write(str(message) + '\n')
+                # Update the order book state and print any fills
+                try:
+                    fill_events = feed_handler.handle(response)
+                    if conf['print_fills']:
+                        print_fills(fill_events, cpid_to_market_info)
+                except Exception as e:
+                    logging.error(f"Error handling message: {str(response)}")
+                    raise e
+        logging.error("websocket stream ended")
+    except websockets.exceptions.WebSocketException as e:
+        logging.error(f"websocket stream error occurred: {e}")
+        raise e
+    except Exception as e:
+        logging.error(f"Unexpected error in websocket stream: {e}")
         raise e
 
 
@@ -149,43 +188,75 @@ def pretty_print_book(
 
 
 async def main(args: dict, cpid_to_market_info: dict[int, dict]):
-    host = conf['dydx_full_node']['grpc_host']
-    port = conf['dydx_full_node']['grpc_port']
+    host = conf['dydx_full_node']['host']
     cpids = conf['stream_options']['clob_pair_ids']
-    addr = f"{host}:{port}"
 
     # This manages order book state
     feed_handler: FeedHandler = StandardFeedHandler()
     if args['validation_mode']:
-        logging.info("Starting GRPC Client in Validation Mode")
+        logging.info("Starting Full Node Streaming Client in Validation Mode")
         feed_handler = ValidationFeedHandler(cpids)
 
-    # Connect to the gRPC feed and start listening
-    # (adjust to use secure channel if needed)
-    async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
-        interval = conf['interval_ms']
-        tasks = [
-            listen_to_stream(
-                channel,
-                cpids,
-                cpid_to_market_info,
-                feed_handler,
-                conf['log_stream_messages'],
-            ),
-        ]
-        if conf['print_books']:
-            print_books_task = asyncio.create_task(
-                print_books_every_n_ms(
-                    feed_handler,
+    if conf['use_grpc']:
+        grpc_port = conf['dydx_full_node']['grpc_port']
+        grpc_addr = f"{host}:{grpc_port}"
+        # Connect to the gRPC feed and start listening
+        # (adjust to use secure channel if needed)
+        async with grpc.aio.insecure_channel(grpc_addr, config.GRPC_OPTIONS) as channel:
+            interval = conf['interval_ms']
+            tasks = [
+                listen_to_grpc_stream(
+                    channel,
+                    cpids,
                     cpid_to_market_info,
-                    interval,
+                    feed_handler,
+                    conf['log_stream_messages'],
                 ),
-            )
-            tasks.append(print_books_task)
+            ]
+            if conf['print_books']:
+                print_books_task = asyncio.create_task(
+                    print_books_every_n_ms(
+                        feed_handler,
+                        cpid_to_market_info,
+                        interval,
+                    ),
+                )
+                tasks.append(print_books_task)
 
-        await asyncio.gather(
-            *tasks
-        )
+            await asyncio.gather(
+                *tasks
+            )
+    elif conf['use_websocket']:
+        joined = ",".join([str(x) for x in cpids])
+        websocket_port = conf['dydx_full_node']['websocket_port']
+        websocket_addr = f"ws://{host}:{websocket_port}/ws?clobPairIds={joined}"
+        # Connect to the websocket and start listening
+        async with websockets.connect(websocket_addr) as websocket:
+            interval = conf['interval_ms']
+            tasks = [
+                listen_to_websocket(
+                    websocket,
+                    cpid_to_market_info,
+                    feed_handler,
+                    conf['log_stream_messages'],
+                ),
+            ]
+            if conf['print_books']:
+                print_books_task = asyncio.create_task(
+                    print_books_every_n_ms(
+                        feed_handler,
+                        cpid_to_market_info,
+                        interval,
+                    ),
+                )
+                tasks.append(print_books_task)
+
+            await asyncio.gather(
+                *tasks
+            )
+
+    else:
+        logging.error("Must specify use_grpc or use_websocket in config.yaml")
 
 
 if __name__ == "__main__":

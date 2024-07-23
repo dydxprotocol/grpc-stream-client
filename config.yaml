@@ -1,7 +1,9 @@
 dydx_full_node:
-  grpc_host: 127.0.0.1 # fill in the IP address of your full node
+  host: 127.0.0.1 # fill in the IP address of your full node
   grpc_port: 9090
   websocket_port: 4321
+use_grpc: false
+use_websocket: true
 stream_options:
   clob_pair_ids:  # IDs of the markets to stream
     - 0
