@@ -5,3 +5,4 @@ PyYAML==6.0.1
 sortedcontainers==2.4.0
 v4-proto==5.0.5
 requests~=2.32.2
+websockets==12.0
