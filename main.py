@@ -9,7 +9,7 @@ import asyncio
 import itertools
 import logging
 import websockets
-from typing import List
+from typing import Dict, List
 
 import grpc
 from google.protobuf import json_format
@@ -25,6 +25,7 @@ import src.fills as fills
 from src.feed_handler import FeedHandler, StandardFeedHandler
 from src.validation_feed_handler import ValidationFeedHandler
 from src.market_info import query_market_info, quantums_to_size, subticks_to_price
+from src.subaccount_handler import fetch_subaccounts, Subaccount, PerpetualPosition
 
 conf = config.Config().get_config()
 
@@ -33,6 +34,7 @@ async def listen_to_grpc_stream(
         channel: grpc.Channel,
         clob_pair_ids: List[int],
         cpid_to_market_info: dict[int, dict],
+        subaccounts: List[str],
         feed_handler: FeedHandler,
         log_path: str,
 ):
@@ -47,14 +49,17 @@ async def listen_to_grpc_stream(
         stub = QueryStub(channel)
         request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
         with open(log_path, 'w') as log:
+            feed_handler.initialize_subaccounts(subaccounts)
             async for response in stub.StreamOrderbookUpdates(request):
                 # Log the message
                 log.write(json_format.MessageToJson(response, indent=None) + '\n')
                 # Update the order book state and print any fills
                 try:
-                    fill_events = feed_handler.handle(response)
+                    fill_events, subaccounts = feed_handler.handle(response)
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
+                    if conf['print_subaccounts']:
+                        print_subaccounts(subaccounts)
                 except Exception as e:
                     logging.error(f"Error handling message: {json_format.MessageToJson(e, indent=None)}")
                     raise e
@@ -128,6 +133,24 @@ def print_fills(
             f'maker={fill.maker}',
         ]))
 
+def print_subaccounts(subaccounts: Dict[str, Subaccount]):
+    """
+    Print the details of subaccounts.
+
+    Args:
+        subaccounts (Dict[str, Subaccount]): A dictionary mapping each "address/account_number" to its corresponding Subaccount.
+    """
+    for subaccount_key, subaccount in subaccounts.items():
+        logging.info(f"Subaccount: {subaccount_key}")
+
+        if not subaccount.perpetual_positions:
+            logging.info("  No perpetual positions.")
+        else:
+            for position in subaccount.perpetual_positions:
+                logging.info("  Perpetual Position:")
+                logging.info(f"    Perpetual ID: {position.perpetual_id}")
+                logging.info(f"    Quantums: {position.quantums}")
+
 
 async def print_books_every_n_ms(
         feed_handler: FeedHandler,
@@ -190,6 +213,7 @@ def pretty_print_book(
 async def main(args: dict, cpid_to_market_info: dict[int, dict]):
     host = conf['dydx_full_node']['host']
     cpids = conf['stream_options']['clob_pair_ids']
+    subaccounts = conf['subaccounts']
 
     # This manages order book state
     feed_handler: FeedHandler = StandardFeedHandler()
@@ -209,6 +233,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
                     channel,
                     cpids,
                     cpid_to_market_info,
+                    subaccounts,
                     feed_handler,
                     conf['log_stream_messages'],
                 ),
@@ -276,6 +301,6 @@ if __name__ == "__main__":
     logging.info(f"Starting with conf: {conf}")
 
     id_to_info = query_market_info(conf['indexer_api'])
-    logging.info(f"Got market info: {id_to_info}")
+    # logging.info(f"Got market info: {id_to_info}")
 
     asyncio.run(main(vars(args), id_to_info))

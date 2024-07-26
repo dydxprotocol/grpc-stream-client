@@ -1,9 +1,9 @@
 dydx_full_node:
-  host: 127.0.0.1 # fill in the IP address of your full node
+  host: 3.129.102.24 # fill in the IP address of your full node
   grpc_port: 9090
   websocket_port: 9091
-use_grpc: false
-use_websocket: true
+use_grpc: true
+use_websocket: false
 stream_options:
   clob_pair_ids:  # IDs of the markets to stream
     - 0
@@ -12,5 +12,10 @@ interval_ms: 1000 # Print book state every second
 indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversions
 log_stream_messages: feed.log # Log messages to this file each time main is run
 print_fills: true # Whether to print fills
+print_subaccounts: true # Whether to print subaccounts
+subaccounts:
+  - dydx134ze6u2ep950rje4n4s9msc2kmf8dfhqfqcjxm/5
+  - dydx19h6ln4082p2s34ef2ecp3r5mhhttcq7qqp02jc/7
+  - dydx1jzvc2m0m9xzeq3dydddlhkqxl4zkrtzpf9tfcv/7
 print_books: true # Whether to print books
 validate_every_n_blocks: 25 # In validation mode, how many blocks between each orderbook check

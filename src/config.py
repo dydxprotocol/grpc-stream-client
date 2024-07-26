@@ -28,7 +28,7 @@ class Config(object):
 
 def get_addr_and_cpids():
     config = Config().get_config()
-    host = config['dydx_full_node']['grpc_host']
+    host = config['dydx_full_node']['host']
     port = config['dydx_full_node']['grpc_port']
     cpids = config['stream_options']['clob_pair_ids']
     addr = f"{host}:{port}"

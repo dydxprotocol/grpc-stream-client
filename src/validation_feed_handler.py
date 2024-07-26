@@ -15,6 +15,7 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 
 import src.book as lob
+from src.subaccount_handler import Subaccount
 from src import fills, validation, helpers, feed_handler, config
 
 CONFIG = config.Config().get_config()
@@ -47,7 +48,7 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         self.last_pcs_books_height: Dict[int, int] = {}
         self.last_pcs_events: Dict[int, asyncio.Event] = {k: asyncio.Event() for k in clob_pair_ids}
 
-    def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
+    def handle(self, message: StreamOrderbookUpdatesResponse) -> (List[fills.Fill], Dict[str, Subaccount]):
         """
         Handle a message from the gRPC feed, updating the local order book
         state. See the protobuf definition[1] of `StreamOrderbookUpdatesResponse`
@@ -74,7 +75,10 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
-        return collected_fills
+        return collected_fills, {}
+
+    def initialize_subaccounts(self, subaccounts: List[str]):
+        pass
 
     def _update_height(self, clob_pair_id: int, new_block_height: int):
         if new_block_height <= 0:

@@ -8,6 +8,7 @@ from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse,
 from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 import OrderPlaceV1, OrderUpdateV1, \
     OrderRemoveV1, OffChainUpdateV1
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
+from src.subaccount_handler import Subaccount, PerpetualPosition, fetch_subaccounts
 
 import src.book as lob
 from src import fills
@@ -16,7 +17,11 @@ from abc import ABC, abstractmethod
 # Abstract class for the feed handler.
 class FeedHandler(ABC):
     @abstractmethod
-    def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
+    def handle(self, message: StreamOrderbookUpdatesResponse) -> (List[fills.Fill], Dict[str, Subaccount]):
+        pass
+
+    @abstractmethod
+    def initialize_subaccounts(self, subaccounts: List[str]):
         pass
 
     @abstractmethod
@@ -35,7 +40,65 @@ class StandardFeedHandler(FeedHandler):
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
 
-    def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
+        # Store subaccounts by 'address/subaccountNumber'
+        self.subaccounts: Dict[str, Subaccount] = {}
+
+    def initialize_subaccounts(self, subaccounts: List[str]):
+        print("Initializing subaccounts")
+        self.subaccounts = fetch_subaccounts(subaccounts)
+        print(f"Got subaccounts: {self.subaccounts}")
+
+    def _update_perpetual_positions(self, fill: fills.Fill):
+        if len(self.subaccounts) == 0:
+            return
+        maker_subaccount_id = f"{fill.maker.owner_address}/{fill.maker.subaccount_number}"
+        taker_subaccount_id = f"{fill.taker.owner_address}/{fill.taker.subaccount_number}"
+
+        # Get or initialize the subaccounts
+        maker_subaccount = self.subaccounts.get(maker_subaccount_id)
+        taker_subaccount = self.subaccounts.get(taker_subaccount_id)
+
+        # Update the perpetual positions
+        if maker_subaccount is not None:
+            self._update_subaccount_perpetual_position(maker_subaccount, fill, is_maker=True)
+            self.subaccounts[maker_subaccount_id] = maker_subaccount
+        if taker_subaccount is not None:
+            self._update_subaccount_perpetual_position(taker_subaccount, fill, is_maker=False)
+            self.subaccounts[taker_subaccount_id] = taker_subaccount
+
+    def _update_subaccount_perpetual_position(self, subaccount: Subaccount, fill: fills.Fill, is_maker: bool):
+        # Determine the change in quantums based on whether the fill is from the maker or taker and the fill direction
+        change_quantums = fill.quantums
+
+        if is_maker:
+            if fill.taker_is_buy:
+                # Taker is buying, maker is selling, so maker's position decreases
+                change_quantums = -fill.quantums
+            else:
+                # Taker is selling, maker is buying, so maker's position increases
+                change_quantums = fill.quantums
+        else:
+            if fill.taker_is_buy:
+                # Taker is buying, taker's position increases
+                change_quantums = fill.quantums
+            else:
+                # Taker is selling, taker's position decreases
+                change_quantums = -fill.quantums
+
+        # Find the perpetual position by perpetual_id (which is fill.clob_pair_id in this context)
+        for position in subaccount.perpetual_positions:
+            if position.perpetual_id == fill.clob_pair_id:
+                position.quantums += change_quantums
+                return
+
+        # If position does not exist, create a new one
+        new_position = PerpetualPosition(
+            perpetual_id=fill.clob_pair_id,
+            quantums=change_quantums
+        )
+        subaccount.perpetual_positions.append(new_position)
+
+    def handle(self, message: StreamOrderbookUpdatesResponse) -> (List[fills.Fill], Dict[str, Subaccount]):
         """
         Handle a message from the gRPC feed, updating the local order book
         state. See the protobuf definition[1] of `StreamOrderbookUpdatesResponse`
@@ -60,7 +123,7 @@ class StandardFeedHandler(FeedHandler):
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
-        return collected_fills
+        return collected_fills, self.subaccounts
 
     def _update_height(self, clob_pair_id: int, new_block_height: int):
         if new_block_height <= 0:
@@ -104,6 +167,9 @@ class StandardFeedHandler(FeedHandler):
                 # Subtract the total filled quantums from the original quantums to get
                 # the remaining amount
                 order.quantums = order.original_quantums - fill.maker_total_filled_quantums
+
+            # Update perpetual positions for maker and taker
+            self._update_perpetual_positions(fill)
         return fs
 
     def _handle_orderbook_update(
