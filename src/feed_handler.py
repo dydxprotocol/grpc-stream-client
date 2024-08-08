@@ -11,6 +11,7 @@ from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, Ind
 
 import src.book as lob
 from src import fills
+from src import subaccounts
 from abc import ABC, abstractmethod
 
 # Abstract class for the feed handler.
@@ -23,6 +24,11 @@ class FeedHandler(ABC):
     def get_books(self) -> Dict[int, lob.LimitOrderBook]:
         pass
 
+    @abstractmethod
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        pass
+
+
 class StandardFeedHandler(FeedHandler):
 
     def __init__(self):
@@ -34,6 +40,9 @@ class StandardFeedHandler(FeedHandler):
 
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
+
+        # Store subaccounts by subaccount ID
+        self.subaccounts: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount] = {}
 
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
@@ -57,6 +66,8 @@ class StandardFeedHandler(FeedHandler):
                 if fs:  # No fills parsed before snapshot
                     self._update_height(fs[0].clob_pair_id, height)
                 collected_fills += fs
+            elif update_type == 'subaccount_update':
+                self._handle_subaccounts(update.subaccount_update)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -74,6 +85,27 @@ class StandardFeedHandler(FeedHandler):
                 f"Block height decreased from "
                 f"{self.heights[clob_pair_id]} to {new_block_height}"
             )
+
+    def _handle_subaccounts(self, update: subaccounts.StreamSubaccountUpdate):
+        """
+        Handle the StreamSubaccountUpdate message, updating the local subaccount state.
+        """
+        parsed_subaccount = subaccounts.parse_subaccounts(update)
+        subaccount_id = parsed_subaccount.subaccount_id
+
+        if update.snapshot:
+            # Replace the entire subaccount if this is a snapshot update
+            self.subaccounts[subaccount_id] = parsed_subaccount
+        else:
+            # Update the existing subaccount, or create a new one if it doesn't exist
+            if subaccount_id in self.subaccounts:
+                existing_subaccount = self.subaccounts[subaccount_id]
+                # Update perpetual positions
+                existing_subaccount.perpetual_positions.update(parsed_subaccount.perpetual_positions)
+                # Update asset positions
+                existing_subaccount.asset_positions.update(parsed_subaccount.asset_positions)
+            else:
+                self.subaccounts[subaccount_id] = parsed_subaccount
 
     def _handle_fills(
             self,
@@ -246,6 +278,12 @@ class StandardFeedHandler(FeedHandler):
         Returns the books stored in this feed handler.
         """
         return self.books
+
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts stored in this feed handler.
+        """
+        return self.subaccounts
 
 
 def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:
