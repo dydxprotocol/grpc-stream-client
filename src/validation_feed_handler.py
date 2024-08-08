@@ -15,7 +15,7 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 
 import src.book as lob
-from src import fills, validation, helpers, feed_handler, config
+from src import fills, validation, helpers, feed_handler, config, subaccounts
 
 CONFIG = config.Config().get_config()
 
@@ -46,6 +46,9 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         self.last_pcs_books: Dict[int, lob.LimitOrderBook] = {}
         self.last_pcs_books_height: Dict[int, int] = {}
         self.last_pcs_events: Dict[int, asyncio.Event] = {k: asyncio.Event() for k in clob_pair_ids}
+
+        # subaccounts by subaccount id
+        self.subaccounts: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount] = {}
 
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
@@ -329,6 +332,12 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         Returns the books stored in this feed handler.
         """
         return self.books
+
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts stored in this feed handler.
+        """
+        return self.subaccounts
 
 
 def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:

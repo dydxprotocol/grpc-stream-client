@@ -8,6 +8,8 @@ stream_options:
   clob_pair_ids:  # IDs of the markets to stream
     - 0
     - 1
+  subaccount_ids:
+    - dydx1zrw6ejvfsvp6pdwuuvz47vjwtwgxcwdzqau888/4
 interval_ms: 1000 # Print book state every second
 indexer_api: http://dev2-indexer-apne1-lb-public-2076363889.ap-northeast-1.elb.amazonaws.com # Used to fetch data for unit conversions
 log_stream_messages: feed.log # Log messages to this file each time main is run
