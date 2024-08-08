@@ -9,19 +9,20 @@ import asyncio
 import itertools
 import logging
 import websockets
-from typing import List
+from typing import Dict, List
 
 import grpc
 from google.protobuf import json_format
 
 # Classes generated from the proto files
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest,\
-StreamOrderbookUpdatesResponse
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest, \
+    StreamOrderbookUpdatesResponse
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
 import src.book as lob
 import src.config as config
 import src.fills as fills
+import src.subaccounts as subaccounts
 from src.feed_handler import FeedHandler, StandardFeedHandler
 from src.validation_feed_handler import ValidationFeedHandler
 from src.market_info import query_market_info, quantums_to_size, subticks_to_price
@@ -49,12 +50,15 @@ async def listen_to_grpc_stream(
         with open(log_path, 'w') as log:
             async for response in stub.StreamOrderbookUpdates(request):
                 # Log the message
+                print('response', response)
                 log.write(json_format.MessageToJson(response, indent=None) + '\n')
                 # Update the order book state and print any fills
                 try:
                     fill_events = feed_handler.handle(response)
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
+                    if conf['print_subaccounts']:
+                        print_subaccounts(feed_handler.get_subaccounts())
                 except Exception as e:
                     logging.error(f"Error handling message: {json_format.MessageToJson(e, indent=None)}")
                     raise e
@@ -65,6 +69,7 @@ async def listen_to_grpc_stream(
     except Exception as e:
         logging.error(f"Unexpected error in stream: {e}")
         raise e
+
 
 async def listen_to_websocket(
         websocket: websockets.WebSocketClientProtocol,
@@ -127,6 +132,22 @@ def print_fills(
             f'taker={fill.taker}',
             f'maker={fill.maker}',
         ]))
+
+
+def print_subaccounts(
+        subaccounts_dict: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount],
+):
+    """
+    Print the subaccounts in a human-readable way.
+    """
+    for subaccount_id, subaccount in subaccounts_dict.items():
+        logging.info(f"Subaccount ID: {subaccount_id.owner_address}/{subaccount_id.subaccount_number}")
+        logging.info("Perpetual Positions:")
+        for perp_id, perp_position in subaccount.perpetual_positions.items():
+            logging.info(f"  Perpetual ID: {perp_id}, Quantums: {perp_position.quantums}")
+        logging.info("Asset Positions:")
+        for asset_id, asset_position in subaccount.asset_positions.items():
+            logging.info(f"  Asset ID: {asset_id}, Quantums: {asset_position.quantums}")
 
 
 async def print_books_every_n_ms(
