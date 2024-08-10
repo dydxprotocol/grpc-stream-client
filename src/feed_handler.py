@@ -4,14 +4,19 @@ Handle messages on the gRPC book feed and build local order books.
 from typing import Dict, List
 
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, StreamOrderbookUpdate, \
-    StreamOrderbookFill
+    StreamOrderbookFill, StreamTakerOrder
 from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 import OrderPlaceV1, OrderUpdateV1, \
     OrderRemoveV1, OffChainUpdateV1
-from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 
 import src.book as lob
+import src.helpers as helpers
 from src import fills
 from abc import ABC, abstractmethod
+import logging
+import src.config as config
+import src.taker_order_metrics as taker_order_metrics
+
+conf = config.Config().get_config()
 
 # Abstract class for the feed handler.
 class FeedHandler(ABC):
@@ -35,6 +40,8 @@ class StandardFeedHandler(FeedHandler):
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
 
+        self.taker_order_metrics = taker_order_metrics.TakerOrderMetrics()
+
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
         Handle a message from the gRPC feed, updating the local order book
@@ -57,6 +64,8 @@ class StandardFeedHandler(FeedHandler):
                 if fs:  # No fills parsed before snapshot
                     self._update_height(fs[0].clob_pair_id, height)
                 collected_fills += fs
+            elif update_type == 'taker_order':
+                self._handle_taker_order(update.taker_order, height)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -74,6 +83,18 @@ class StandardFeedHandler(FeedHandler):
                 f"Block height decreased from "
                 f"{self.heights[clob_pair_id]} to {new_block_height}"
             )
+    
+    def _handle_taker_order(
+            self,
+            stream_taker_order: StreamTakerOrder,
+            block_height: int
+    ):
+        """
+        Handle a StreamTakerOrder message.
+        """
+        order = helpers.parse_protocol_order(stream_taker_order.order)
+        self.taker_order_metrics.process_order(order, block_height)
+
 
     def _handle_fills(
             self,
@@ -175,14 +196,8 @@ class StandardFeedHandler(FeedHandler):
         Handle an order placement message and return the clob pair id.
         """
         # Parse the order fields
-        oid = parse_id(order_place.order.order_id)
-        order = lob.Order(
-            order_id=oid,
-            is_bid=order_place.order.side == IndexerOrder.SIDE_BUY,
-            original_quantums=order_place.order.quantums,
-            quantums=order_place.order.quantums,
-            subticks=order_place.order.subticks,
-        )
+        order = helpers.parse_indexer_order(order_place.order)
+        oid = order.order_id
 
         # Insert the order into the relevant book
         clob_pair_id = order_place.order.order_id.clob_pair_id
@@ -204,7 +219,7 @@ class StandardFeedHandler(FeedHandler):
         """
         # Find the order
         clob_pair_id = order_update.order_id.clob_pair_id
-        oid = parse_id(order_update.order_id)
+        oid = helpers.parse_indexer_oid(order_update.order_id)
         order = self._get_book(clob_pair_id).get_order(oid)
 
         # Ignore updates for orders that don't exist in the book. Each
@@ -233,7 +248,7 @@ class StandardFeedHandler(FeedHandler):
         """
         # Remove the order from the relevant book
         clob_pair_id = order_remove.removed_order_id.clob_pair_id
-        oid = parse_id(order_remove.removed_order_id)
+        oid = helpers.parse_indexer_oid(order_remove.removed_order_id)
         book = self._get_book(clob_pair_id)
         if book.get_order(oid) is not None:
             book.remove_order(oid)
@@ -246,14 +261,3 @@ class StandardFeedHandler(FeedHandler):
         Returns the books stored in this feed handler.
         """
         return self.books
-
-
-def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:
-    """
-    Parse an order ID from the fields in an IndexerOrderId message.
-    """
-    return lob.OrderId(
-        owner_address=oid_fields.subaccount_id.owner,
-        subaccount_number=oid_fields.subaccount_id.number,
-        client_id=oid_fields.client_id,
-    )

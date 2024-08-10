@@ -1,4 +1,7 @@
 from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 import OffChainUpdateV1
+from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
+from v4_proto.dydxprotocol.clob.order_pb2 import OrderId, Order
+import src.book as lob
 
 def get_clob_pair_id_from_offchain_update(update: OffChainUpdateV1) -> int:
     clob_pair_id = None
@@ -13,3 +16,52 @@ def get_clob_pair_id_from_offchain_update(update: OffChainUpdateV1) -> int:
     else:
         raise ValueError(f"Unknown update type '{update_type}' in: {update}")
     return clob_pair_id
+
+def parse_indexer_oid(oid_fields: IndexerOrderId) -> lob.OrderId:
+    """
+    Parse an order ID from the fields in an IndexerOrderId message.
+    """
+    return lob.OrderId(
+        owner_address=oid_fields.subaccount_id.owner,
+        subaccount_number=oid_fields.subaccount_id.number,
+        client_id=oid_fields.client_id,
+        order_flags=oid_fields.order_flags,
+    )
+
+def parse_protocol_oid(oid_fields: OrderId) -> lob.OrderId:
+    """
+    Parse an order ID from the fields in a Protocol OrderId message.
+    """
+    return lob.OrderId(
+        owner_address=oid_fields.subaccount_id.owner,
+        subaccount_number=oid_fields.subaccount_id.number,
+        client_id=oid_fields.client_id,
+        order_flags=oid_fields.order_flags,
+    )
+
+def parse_indexer_order(order: IndexerOrder) -> lob.Order:
+    """
+    Parse an order ID from the fields in a Indexer OrderId message.
+    """
+    lob_oid = parse_indexer_oid(order.order_id)
+    return lob.Order(
+        order_id=lob_oid,
+        is_bid=order.side == IndexerOrder.SIDE_BUY,
+        original_quantums=order.quantums,
+        quantums=order.quantums,
+        subticks=order.subticks,
+    )
+
+def parse_protocol_order(order: Order) -> lob.Order:
+    """
+    Parse an order ID from the fields in a Protocol OrderId message.
+    """
+    lob_oid = parse_protocol_oid(order.order_id)
+    return lob.Order(
+        order_id=lob_oid,
+        is_bid=order.side == Order.SIDE_BUY,
+        original_quantums=order.quantums,
+        quantums=order.quantums,
+        subticks=order.subticks,
+    )
+

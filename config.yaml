@@ -13,4 +13,5 @@ indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversion
 log_stream_messages: feed.log # Log messages to this file each time main is run
 print_fills: true # Whether to print fills
 print_books: true # Whether to print books
+print_taker_orders: true # Whether to print taker orders
 validate_every_n_blocks: 25 # In validation mode, how many blocks between each orderbook check
