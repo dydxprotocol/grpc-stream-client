@@ -9,13 +9,12 @@ import asyncio
 import logging
 
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, StreamOrderbookUpdate, \
-    StreamOrderbookFill
+    StreamOrderbookFill, StreamTakerOrder
 from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 import OrderPlaceV1, OrderUpdateV1, \
     OrderRemoveV1, OffChainUpdateV1
-from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 
 import src.book as lob
-from src import fills, validation, helpers, feed_handler, config, subaccounts
+from src import fills, validation, helpers, feed_handler, config, taker_order_metrics, subaccounts
 
 CONFIG = config.Config().get_config()
 
@@ -30,6 +29,8 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
 
         # last exec mode seen by clob pair id
         self.last_exec_modes: Dict[int, int] = {}
+              
+        self.taker_order_metrics = taker_order_metrics.TakerOrderMetrics()
 
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
@@ -37,7 +38,7 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         self.cpids = clob_pair_ids
 
         # coroutine to fetch pcs snapshots every N blocks. Used to await a snapshot fetch call.
-        self.fetched_snapshot_await = None
+        self.fetched_snapshot_await = asyncio.Future()
         # snapshot of the books and it's height, fetched from a new grpc stream.
         self.last_snapshot_books: Dict[int, lob.LimitOrderBook] = {}
         self.last_snapshot_height: int = -1
@@ -74,6 +75,11 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
                     # update the exec mode for this clob pair
                     self._update_exec_mode(fs[0].clob_pair_id, update.exec_mode, height)
                 collected_fills += fs
+            elif update_type == 'taker_order':
+                self._handle_taker_order(update.taker_order, height)
+            elif update_type == 'subaccount_update':
+                # TODO(CT-968): Implement subaccount update handling
+                continue
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -120,6 +126,17 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
                 )
         
         self.last_exec_modes[clob_pair_id] = new_exec_mode
+
+    def _handle_taker_order(
+            self,
+            stream_taker_order: StreamTakerOrder,
+            block_height: int
+    ):
+        """
+        Handle a StreamTakerOrder message.
+        """
+        order = helpers.parse_protocol_order(stream_taker_order.order)
+        self.taker_order_metrics.process_order(order, block_height)
 
     def _handle_fills(
             self,
@@ -223,14 +240,8 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         Handle an order placement message and return the clob pair id.
         """
         # Parse the order fields
-        oid = parse_id(order_place.order.order_id)
-        order = lob.Order(
-            order_id=oid,
-            is_bid=order_place.order.side == IndexerOrder.SIDE_BUY,
-            original_quantums=order_place.order.quantums,
-            quantums=order_place.order.quantums,
-            subticks=order_place.order.subticks,
-        )
+        order = helpers.parse_indexer_order(order_place.order)
+        oid = order.order_id
 
         # Insert the order into the relevant book
         clob_pair_id = order_place.order.order_id.clob_pair_id
@@ -252,7 +263,7 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         """
         # Find the order
         clob_pair_id = order_update.order_id.clob_pair_id
-        oid = parse_id(order_update.order_id)
+        oid = helpers.parse_indexer_oid(order_update.order_id)
         order = self._get_book(clob_pair_id).get_order(oid)
 
         # Ignore updates for orders that don't exist in the book. Each
@@ -281,7 +292,7 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         """
         # Remove the order from the relevant book
         clob_pair_id = order_remove.removed_order_id.clob_pair_id
-        oid = parse_id(order_remove.removed_order_id)
+        oid = helpers.parse_indexer_oid(order_remove.removed_order_id)
         book = self._get_book(clob_pair_id)
         if book.get_order(oid) is not None:
             book.remove_order(oid)
@@ -301,6 +312,7 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         # need to await the fetch of the snapshot and the next block
         await self.fetched_snapshot_await
         await event.wait()
+
         local_book = self.last_pcs_books[cpid]
         local_book_height = self.last_pcs_books_height[cpid]
         if local_book_height != self.last_snapshot_height:
@@ -338,17 +350,6 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         Returns the subaccounts stored in this feed handler.
         """
         return self.subaccounts
-
-
-def parse_id(oid_fields: IndexerOrderId) -> lob.OrderId:
-    """
-    Parse an order ID from the fields in an IndexerOrderId message.
-    """
-    return lob.OrderId(
-        owner_address=oid_fields.subaccount_id.owner,
-        subaccount_number=oid_fields.subaccount_id.number,
-        client_id=oid_fields.client_id,
-    )
 
 def generate_books_from_snapshot(
     clob_pair_ids: dict[int, dict],
