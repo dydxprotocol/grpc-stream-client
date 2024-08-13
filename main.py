@@ -74,7 +74,6 @@ async def listen_to_grpc_stream(
         logging.error(f"Unexpected error in stream: {e}")
         raise e
 
-
 async def listen_to_websocket(
         websocket: websockets.WebSocketClientProtocol,
         cpid_to_market_info: dict[int, dict],
