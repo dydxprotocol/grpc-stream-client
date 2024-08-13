@@ -73,6 +73,7 @@ def parse_pb_id(oid: OrderId) -> lob.OrderId:
         owner_address=oid.subaccount_id.owner,
         subaccount_number=oid.subaccount_id.number,
         client_id=oid.client_id,
+        order_flags=oid.order_flags
     )
 
 

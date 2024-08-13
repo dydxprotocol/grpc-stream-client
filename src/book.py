@@ -18,6 +18,7 @@ class OrderId:
     owner_address: str  # address of the account which placed the order
     subaccount_number: int  # index of the subaccount belonging to owner
     client_id: int  # client identifier for the order (unique at any given time, but can be reused)
+    order_flags: int  # Order flags indicating if this is a conditional, short term, or long term order.
 
 
 @dataclass
