@@ -8,10 +8,13 @@ stream_options:
   clob_pair_ids:  # IDs of the markets to stream
     - 0
     - 1
+  subaccount_ids:
+    - dydx1nzuttarf5k2j0nug5yzhr6p74t9avehn9hlh8m/0  # each subaccount id is string with format owner/number
 interval_ms: 1000 # Print book state every second
 indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversions
 log_stream_messages: feed.log # Log messages to this file each time main is run
 print_fills: true # Whether to print fills
 print_books: true # Whether to print books
+print_subaccounts: true # Whether to print subaccounts
 print_taker_orders: true # Whether to print taker orders
 validate_every_n_blocks: 25 # In validation mode, how many blocks between each orderbook check

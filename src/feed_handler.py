@@ -10,7 +10,7 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
 
 import src.book as lob
 import src.helpers as helpers
-from src import fills
+from src import fills, subaccounts
 from abc import ABC, abstractmethod
 import logging
 import src.config as config
@@ -28,6 +28,10 @@ class FeedHandler(ABC):
     def get_books(self) -> Dict[int, lob.LimitOrderBook]:
         pass
 
+    @abstractmethod
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        pass
+
 class StandardFeedHandler(FeedHandler):
 
     def __init__(self):
@@ -41,6 +45,9 @@ class StandardFeedHandler(FeedHandler):
         self.has_seen_first_snapshot = False
 
         self.taker_order_metrics = taker_order_metrics.TakerOrderMetrics()
+
+        # Store subaccounts by subaccount ID
+        self.subaccounts: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount] = {}
 
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
@@ -66,6 +73,8 @@ class StandardFeedHandler(FeedHandler):
                 collected_fills += fs
             elif update_type == 'taker_order':
                 self._handle_taker_order(update.taker_order, height)
+            elif update_type == 'subaccount_update':
+                self._handle_subaccounts(update.subaccount_update)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -83,7 +92,29 @@ class StandardFeedHandler(FeedHandler):
                 f"Block height decreased from "
                 f"{self.heights[clob_pair_id]} to {new_block_height}"
             )
-    
+
+    def _handle_subaccounts(self, update: subaccounts.StreamSubaccountUpdate):
+        """
+        Handle the StreamSubaccountUpdate message, updating the local subaccount state.
+        """
+        parsed_subaccount = subaccounts.parse_subaccounts(update)
+        subaccount_id = parsed_subaccount.subaccount_id
+
+        if update.snapshot:
+            if subaccount_id in self.subaccounts:
+                raise AssertionError(f"Saw multiple snapshots for subaccount id {subaccount_id}, expected exactly one")
+            self.subaccounts[subaccount_id] = parsed_subaccount
+        else:
+            # Skip messages until the first snapshot is received
+            if subaccount_id not in self.subaccounts:
+                return
+            # Update the existing subaccount
+            existing_subaccount = self.subaccounts[subaccount_id]
+            # Update perpetual positions
+            existing_subaccount.perpetual_positions.update(parsed_subaccount.perpetual_positions)
+            # Update asset positions
+            existing_subaccount.asset_positions.update(parsed_subaccount.asset_positions)
+
     def _handle_taker_order(
             self,
             stream_taker_order: StreamTakerOrder,
@@ -261,3 +292,9 @@ class StandardFeedHandler(FeedHandler):
         Returns the books stored in this feed handler.
         """
         return self.books
+
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts stored in this feed handler.
+        """
+        return self.subaccounts

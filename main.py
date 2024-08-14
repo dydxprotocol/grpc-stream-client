@@ -9,19 +9,21 @@ import asyncio
 import itertools
 import logging
 import websockets
-from typing import List
+from typing import Dict, List
 
 import grpc
 from google.protobuf import json_format
 
 # Classes generated from the proto files
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest,\
-StreamOrderbookUpdatesResponse
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest, \
+    StreamOrderbookUpdatesResponse
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
+from v4_proto.dydxprotocol.subaccounts.subaccount_pb2 import SubaccountId
 
 import src.book as lob
 import src.config as config
 import src.fills as fills
+import src.subaccounts as subaccounts
 from src.feed_handler import FeedHandler, StandardFeedHandler
 from src.validation_feed_handler import ValidationFeedHandler
 from src.market_info import query_market_info, quantums_to_size, subticks_to_price
@@ -32,6 +34,7 @@ conf = config.Config().get_config()
 async def listen_to_grpc_stream(
         channel: grpc.Channel,
         clob_pair_ids: List[int],
+        subaccount_ids: List[str],
         cpid_to_market_info: dict[int, dict],
         feed_handler: FeedHandler,
         log_path: str,
@@ -45,7 +48,9 @@ async def listen_to_grpc_stream(
 
     try:
         stub = QueryStub(channel)
-        request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
+        # parse subaccount ids, each subaccount id is string with format owner/number
+        subaccount_protos = [SubaccountId(owner=sa.split('/')[0], number=int(sa.split('/')[1])) for sa in subaccount_ids]
+        request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids, subaccount_ids=subaccount_protos)
         with open(log_path, 'w') as log:
             async for response in stub.StreamOrderbookUpdates(request):
                 # Log the message
@@ -55,6 +60,8 @@ async def listen_to_grpc_stream(
                     fill_events = feed_handler.handle(response)
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
+                    if conf['print_subaccounts']:
+                        print_subaccounts(feed_handler.get_subaccounts())
                 except Exception as e:
                     logging.error(f"Error handling message: {json_format.MessageToJson(e, indent=None)}")
                     raise e
@@ -129,6 +136,27 @@ def print_fills(
         ]))
 
 
+def print_subaccounts(subaccounts_dict: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]):
+    """
+    Print the subaccounts in a human-readable way.
+    """
+    for subaccount_id, subaccount in subaccounts_dict.items():
+        perpetual_positions_str = ", ".join(
+            [f"Perpetual ID: {perp_id}, Quantums: {perp_position.quantums}" for perp_id, perp_position in
+             subaccount.perpetual_positions.items()]
+        )
+        asset_positions_str = ", ".join(
+            [f"Asset ID: {asset_id}, Quantums: {asset_position.quantums}" for asset_id, asset_position in
+             subaccount.asset_positions.items()]
+        )
+
+        logging.info(" | ".join([
+            f"Subaccount ID: {subaccount_id.owner_address}/{subaccount_id.subaccount_number}",
+            f"Perpetual Positions: {perpetual_positions_str}",
+            f"Asset Positions: {asset_positions_str}"
+        ]))
+
+
 async def print_books_every_n_ms(
         feed_handler: FeedHandler,
         cpid_to_market_info: dict[int, dict],
@@ -190,6 +218,7 @@ def pretty_print_book(
 async def main(args: dict, cpid_to_market_info: dict[int, dict]):
     host = conf['dydx_full_node']['host']
     cpids = conf['stream_options']['clob_pair_ids']
+    subaccount_ids = conf['stream_options']['subaccount_ids']
 
     # This manages order book state
     feed_handler: FeedHandler = StandardFeedHandler()
@@ -208,6 +237,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
                 listen_to_grpc_stream(
                     channel,
                     cpids,
+                    subaccount_ids,
                     cpid_to_market_info,
                     feed_handler,
                     conf['log_stream_messages'],

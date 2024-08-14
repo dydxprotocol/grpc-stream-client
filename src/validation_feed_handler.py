@@ -14,7 +14,7 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
     OrderRemoveV1, OffChainUpdateV1
 
 import src.book as lob
-from src import fills, validation, helpers, feed_handler, config, taker_order_metrics
+from src import fills, validation, helpers, feed_handler, config, taker_order_metrics, subaccounts
 
 CONFIG = config.Config().get_config()
 
@@ -48,6 +48,9 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         self.last_pcs_books_height: Dict[int, int] = {}
         self.last_pcs_events: Dict[int, asyncio.Event] = {k: asyncio.Event() for k in clob_pair_ids}
 
+        # subaccounts by subaccount id
+        self.subaccounts: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount] = {}
+
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
         Handle a message from the gRPC feed, updating the local order book
@@ -74,6 +77,9 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
                 collected_fills += fs
             elif update_type == 'taker_order':
                 self._handle_taker_order(update.taker_order, height)
+            elif update_type == 'subaccount_update':
+                # TODO(CT-968): Implement subaccount update handling
+                continue
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -338,6 +344,12 @@ class ValidationFeedHandler(feed_handler.FeedHandler):
         Returns the books stored in this feed handler.
         """
         return self.books
+
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts stored in this feed handler.
+        """
+        return self.subaccounts
 
 def generate_books_from_snapshot(
     clob_pair_ids: dict[int, dict],
