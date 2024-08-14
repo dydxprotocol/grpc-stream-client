@@ -100,20 +100,18 @@ class StandardFeedHandler(FeedHandler):
         parsed_subaccount = subaccounts.parse_subaccounts(update)
         subaccount_id = parsed_subaccount.subaccount_id
 
-        if update.snapshot:
-            # Replace the entire subaccount if this is a snapshot update
+        if update.snapshot or subaccount_id not in self.subaccounts:
+            # Replace the entire subaccount if this is a snapshot update or if the subaccount
+            # doesn't exist yet
             self.subaccounts[subaccount_id] = parsed_subaccount
         else:
-            # Update the existing subaccount, or create a new one if it doesn't exist
-            if subaccount_id in self.subaccounts:
-                existing_subaccount = self.subaccounts[subaccount_id]
-                # Update perpetual positions
-                existing_subaccount.perpetual_positions.update(parsed_subaccount.perpetual_positions)
-                # Update asset positions
-                existing_subaccount.asset_positions.update(parsed_subaccount.asset_positions)
-            else:
-                self.subaccounts[subaccount_id] = parsed_subaccount
-    
+            # Update the existing subaccount
+            existing_subaccount = self.subaccounts[subaccount_id]
+            # Update perpetual positions
+            existing_subaccount.perpetual_positions.update(parsed_subaccount.perpetual_positions)
+            # Update asset positions
+            existing_subaccount.asset_positions.update(parsed_subaccount.asset_positions)
+
     def _handle_taker_order(
             self,
             stream_taker_order: StreamTakerOrder,

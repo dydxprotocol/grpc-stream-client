@@ -21,7 +21,9 @@ class SubaccountAssetPosition:
 @dataclass
 class StreamSubaccount:
     subaccount_id: SubaccountId
+    # Map from perpetual_id to SubaccountPerpetualPosition
     perpetual_positions: Dict[int, SubaccountPerpetualPosition]
+    # Map from asset_id to SubaccountAssetPosition
     asset_positions: Dict[int, SubaccountAssetPosition]
 
 

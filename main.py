@@ -54,7 +54,6 @@ async def listen_to_grpc_stream(
         with open(log_path, 'w') as log:
             async for response in stub.StreamOrderbookUpdates(request):
                 # Log the message
-                print('response', response)
                 log.write(json_format.MessageToJson(response, indent=None) + '\n')
                 # Update the order book state and print any fills
                 try:
