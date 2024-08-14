@@ -100,11 +100,14 @@ class StandardFeedHandler(FeedHandler):
         parsed_subaccount = subaccounts.parse_subaccounts(update)
         subaccount_id = parsed_subaccount.subaccount_id
 
-        if update.snapshot or subaccount_id not in self.subaccounts:
-            # Replace the entire subaccount if this is a snapshot update or if the subaccount
-            # doesn't exist yet
+        if update.snapshot:
+            if subaccount_id in self.subaccounts:
+                raise AssertionError(f"Saw multiple snapshots for subaccount id {subaccount_id}, expected exactly one")
             self.subaccounts[subaccount_id] = parsed_subaccount
         else:
+            # Skip messages until the first snapshot is received
+            if subaccount_id not in self.subaccounts:
+                return
             # Update the existing subaccount
             existing_subaccount = self.subaccounts[subaccount_id]
             # Update perpetual positions
