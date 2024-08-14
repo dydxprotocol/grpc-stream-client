@@ -73,10 +73,7 @@ def is_snapshot_update(update: StreamUpdate) -> bool:
     update_type = update.WhichOneof('update_message')
     if update_type == 'orderbook_update':
         return update.orderbook_update.snapshot
-    # Fills are never emitted 
-    elif update_type == 'order_fill':
-        return False
-    elif update_type == 'taker_order':
+    elif update_type == 'order_fill' or update_type == 'taker_order':
         return False
     elif update_type == 'subaccount_update':
         return update.subaccount_update.snapshot

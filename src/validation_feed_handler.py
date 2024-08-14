@@ -1,6 +1,6 @@
 """
-Thin wrapper around the StandardFeedHandler to perform orderbook checks
-if the full node emitting full node streaming metrics has the `fns-snapshot-interval`
+Thin wrapper around the StandardFeedHandler to perform orderbook checks.
+The full node emitting full node streaming metrics must have the `fns-snapshot-interval`
 flag set to a non negative number.
 """
 from typing import Dict, List
@@ -9,7 +9,7 @@ from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse
 
 import src.book as lob
 import src.helpers as helpers
-from src import fills
+from src import fills, subaccounts
 import logging
 import src.config as config
 import src.taker_order_metrics as taker_order_metrics
@@ -19,16 +19,8 @@ conf = config.Config().get_config()
 
 class ValidationFeedHandler(FeedHandler):
     def __init__(self):
-        # Store order books by clob pair ID
-        self.books: Dict[int, lob.LimitOrderBook] = {}
-
-        # Block heights by clob pair ID
-        self.heights: Dict[int, int] = {}
-
         # Discard messages until the first snapshot is received
         self.has_seen_first_snapshot = False
-
-        self.taker_order_metrics = taker_order_metrics.TakerOrderMetrics()
 
         # Standard feed handler to maintain standard orderbook.
         self.standard_feed_handler = StandardFeedHandler()
@@ -65,4 +57,10 @@ class ValidationFeedHandler(FeedHandler):
         """
         Returns the books stored in this feed handler.
         """
-        return self.books
+        return self.standard_feed_handler.get_books()
+
+    def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts stored in this feed handler.
+        """
+        return self.standard_feed_handler.get_subaccounts()

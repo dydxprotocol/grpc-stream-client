@@ -261,6 +261,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         websocket_port = conf['dydx_full_node']['websocket_port']
         websocket_addr = f"ws://{host}:{websocket_port}/ws?clobPairIds={joined}"
         # Connect to the websocket and start listening
+        # TODO(wliu) add subaccount information
         async with websockets.connect(websocket_addr) as websocket:
             interval = conf['interval_ms']
             tasks = [
