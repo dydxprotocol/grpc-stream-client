@@ -224,7 +224,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
     feed_handler: FeedHandler = StandardFeedHandler()
     if args['validation_mode']:
         logging.info("Starting Full Node Streaming Client in Validation Mode")
-        feed_handler = ValidationFeedHandler(cpids)
+        feed_handler = ValidationFeedHandler()
 
     if conf['use_grpc']:
         grpc_port = conf['dydx_full_node']['grpc_port']

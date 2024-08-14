@@ -117,10 +117,12 @@ class LimitOrderBook:
         lowest_ask = self._asks.peekitem(0)
         return (highest_bid[0] + lowest_ask[0]) / 2.0
 
-    def compare_books(self, other: LimitOrderBook):
+    def compare_books(self, other: LimitOrderBook) -> bool:
         """
-        Compares the two orderbooks. Prints out any inconsistencies
+        Compares the two orderbooks. Prints out any inconsistencies.
+        Returns a boolean True if the books are the same.
         """
+        failed = False
         num_orders = len(self.oid_to_order_node)
         num_asks = len(self._asks)
         num_bids = len(self._bids)
@@ -133,21 +135,31 @@ class LimitOrderBook:
 
         if num_orders != other_num_orders:
             logging.error(f"FAIL: num orders: {num_orders} {other_num_orders}")
+            failed = True
+        for oid in self.oid_to_order_node:
+            if not oid in other.oid_to_order_node:
+                logging.error(f"FAIL: order: {oid} does not exist in other book")
+                failed = True
         if num_asks != other_num_asks:
             logging.error(f"FAIL: num asks: {num_asks} {other_num_asks}")
+            failed = True
         if num_bids != other_num_bids:
             logging.error(f"FAIL: num bids: {num_bids} {other_num_bids}")
+            failed = True
         if midpoint_price != other_midpoint_price:
             logging.error(f"FAIL: midpoint price: {midpoint_price} {other_midpoint_price}")
+            failed = True
         for level, dll in self._asks.items():
             other_dll = other._asks[level]
             if not dll.is_equal(other_dll):
                 logging.error(f"FAIL: Asks Price level {level} mismatching orders")
+                failed = True
         for level, dll in self._bids.items():
             other_dll = other._bids[level]
             if not dll.is_equal(other_dll):
                 logging.error(f"FAIL: Bids Price level {level} mismatching orders")
-
+            failed = True
+        return not failed
 
 def asks_bids_from_book(book: LimitOrderBook,) -> Tuple[List[Order], List[Order]]:
     return list(book.asks()), list(book.bids())
