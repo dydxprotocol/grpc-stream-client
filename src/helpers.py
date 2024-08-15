@@ -2,6 +2,7 @@ from v4_proto.dydxprotocol.indexer.off_chain_updates.off_chain_updates_pb2 impor
 from v4_proto.dydxprotocol.indexer.protocol.v1.clob_pb2 import IndexerOrder, IndexerOrderId
 from v4_proto.dydxprotocol.clob.order_pb2 import OrderId, Order
 import src.book as lob
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamUpdate
 
 def get_clob_pair_id_from_offchain_update(update: OffChainUpdateV1) -> int:
     clob_pair_id = None
@@ -65,3 +66,16 @@ def parse_protocol_order(order: Order) -> lob.Order:
         subticks=order.subticks,
     )
 
+def is_snapshot_update(update: StreamUpdate) -> bool:
+    """
+    Checks if the given update is a snapshot update.
+    """
+    update_type = update.WhichOneof('update_message')
+    if update_type == 'orderbook_update':
+        return update.orderbook_update.snapshot
+    elif update_type == 'order_fill' or update_type == 'taker_order':
+        return False
+    elif update_type == 'subaccount_update':
+        return update.subaccount_update.snapshot
+    else:
+        raise ValueError(f"Unknown update type '{update_type}' in: {update}")

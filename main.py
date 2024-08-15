@@ -224,7 +224,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
     feed_handler: FeedHandler = StandardFeedHandler()
     if args['validation_mode']:
         logging.info("Starting Full Node Streaming Client in Validation Mode")
-        feed_handler = ValidationFeedHandler(cpids)
+        feed_handler = ValidationFeedHandler()
 
     if conf['use_grpc']:
         grpc_port = conf['dydx_full_node']['grpc_port']
@@ -261,6 +261,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         websocket_port = conf['dydx_full_node']['websocket_port']
         websocket_addr = f"ws://{host}:{websocket_port}/ws?clobPairIds={joined}"
         # Connect to the websocket and start listening
+        # TODO(wliu) add subaccount information
         async with websockets.connect(websocket_addr) as websocket:
             interval = conf['interval_ms']
             tasks = [

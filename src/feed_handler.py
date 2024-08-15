@@ -1,6 +1,7 @@
 """
 Handle messages on the gRPC book feed and build local order books.
 """
+from __future__ import annotations
 from typing import Dict, List
 
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse, StreamOrderbookUpdate, \
@@ -175,12 +176,15 @@ class StandardFeedHandler(FeedHandler):
         if not self.has_seen_first_snapshot and not update.snapshot:
             return
 
+        # Skip subsequent snapshots. This will only happen if
+        # snapshot interval is turned on on the full node.
+        if update.snapshot and self.has_seen_first_snapshot:
+            return
+
         if update.snapshot:
             # This is a new snapshot of the book state; start processing updates
             if not self.has_seen_first_snapshot:
                 self.has_seen_first_snapshot = True
-            else:
-                raise AssertionError("Saw multiple snapshots, expected exactly one.")
 
         # Process each update in the batch
         for u in update.updates:
@@ -298,3 +302,25 @@ class StandardFeedHandler(FeedHandler):
         Returns the subaccounts stored in this feed handler.
         """
         return self.subaccounts
+
+    def compare(self, other: StandardFeedHandler) -> bool:
+        """
+        Compares the two standard feed handlers. Returns a
+        boolean True if the feed handlers are equivalent, otherwise
+        error lgos out inconsistencies.
+        """
+        failed = False
+        self_books = self.get_books()
+        other_books = other.get_books()
+        if len(self_books) != len(other_books):
+            logging.error(f"Mismatched book clob pair ids: \n{self_books.keys()}\n{other_books.keys()}")
+            return False
+
+        for cpid in self_books.keys():
+            self_book = self_books[cpid]
+            other_book = other_books[cpid]
+            comparison_failed = self_book.compare_books(other_book)
+            if comparison_failed:
+                failed = True
+        # TODO compare subaccounts
+        return not failed
