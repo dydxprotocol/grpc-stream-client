@@ -259,10 +259,11 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
     elif conf['use_websocket']:
         joined = ",".join([str(x) for x in cpids])
         websocket_port = conf['dydx_full_node']['websocket_port']
-        websocket_addr = f"ws://{host}:{websocket_port}/ws?clobPairIds={joined}"
+        subaccount_ids_joined = ",".join(subaccount_ids)
+        websocket_addr = f"ws://{host}:{websocket_port}/ws?clobPairIds={joined}&subaccountIds={subaccount_ids_joined}"
         # Connect to the websocket and start listening
         # TODO(wliu) add subaccount information
-        async with websockets.connect(websocket_addr) as websocket:
+        async with websockets.connect(websocket_addr, ping_interval=None) as websocket:
             interval = conf['interval_ms']
             tasks = [
                 listen_to_websocket(
