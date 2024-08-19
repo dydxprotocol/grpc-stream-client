@@ -322,5 +322,9 @@ class StandardFeedHandler(FeedHandler):
             comparison_failed = self_book.compare_books(other_book)
             if comparison_failed:
                 failed = True
-        # TODO compare subaccounts
+
+        if self.get_subaccounts() != other.get_subaccounts():
+            logging.error(f"Mismatched subaccounts: \n{self.get_subaccounts()}\n{other.get_subaccounts()}")
+            return False
+
         return not failed
