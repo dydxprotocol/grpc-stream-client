@@ -102,8 +102,11 @@ class StandardFeedHandler(FeedHandler):
         subaccount_id = parsed_subaccount.subaccount_id
 
         if update.snapshot:
+            # Skip subsequent snapshots. This will only happen if
+            # snapshot interval is turned on on the full node.
             if subaccount_id in self.subaccounts:
-                raise AssertionError(f"Saw multiple snapshots for subaccount id {subaccount_id}, expected exactly one")
+                logging.warning(f"Saw multiple snapshots for subaccount id {subaccount_id}")
+                return
             self.subaccounts[subaccount_id] = parsed_subaccount
         else:
             # Skip messages until the first snapshot is received
