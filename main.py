@@ -61,7 +61,7 @@ async def listen_to_grpc_stream(
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
                     if conf['print_subaccounts']:
-                        print_subaccounts(feed_handler.get_subaccounts())
+                        print_subaccounts(feed_handler.get_recent_subaccount_updates())
                 except Exception as e:
                     logging.error(f"Error handling message: {json_format.MessageToJson(e, indent=None)}")
                     raise e
@@ -99,6 +99,8 @@ async def listen_to_websocket(
                     fill_events = feed_handler.handle(response)
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
+                    if conf['print_subaccounts']:
+                        print_subaccounts(feed_handler.get_recent_subaccount_updates())
                 except Exception as e:
                     logging.error(f"Error handling message: {str(response)}")
                     raise e
@@ -257,12 +259,19 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
                 *tasks
             )
     elif conf['use_websocket']:
-        joined = ",".join([str(x) for x in cpids])
+        params = []
+        if cpids:
+            joined_cpids = ",".join([str(x) for x in cpids])
+            params.append(f"clobPairIds={joined_cpids}")
+
+        if subaccount_ids:
+            joined_subaccount_ids = ",".join([str(x) for x in subaccount_ids])
+            params.append(f"subaccountIds={joined_subaccount_ids}")
         websocket_port = conf['dydx_full_node']['websocket_port']
-        websocket_addr = f"ws://{host}:{websocket_port}/ws?clobPairIds={joined}"
+        params_str = "&".join(params)
+        websocket_addr = f"ws://{host}:{websocket_port}/ws?{params_str}"
         # Connect to the websocket and start listening
-        # TODO(wliu) add subaccount information
-        async with websockets.connect(websocket_addr) as websocket:
+        async with websockets.connect(websocket_addr, ping_interval=None) as websocket:
             interval = conf['interval_ms']
             tasks = [
                 listen_to_websocket(

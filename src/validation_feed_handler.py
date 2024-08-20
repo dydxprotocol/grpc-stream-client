@@ -64,3 +64,9 @@ class ValidationFeedHandler(FeedHandler):
         Returns the subaccounts stored in this feed handler.
         """
         return self.standard_feed_handler.get_subaccounts()
+
+    def get_recent_subaccount_updates(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts that were updated in the most recent message.
+        """
+        return self.standard_feed_handler.get_recent_subaccount_updates()

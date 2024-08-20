@@ -33,6 +33,10 @@ class FeedHandler(ABC):
     def get_subaccounts(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
         pass
 
+    @abstractmethod
+    def get_recent_subaccount_updates(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        pass
+
 class StandardFeedHandler(FeedHandler):
 
     def __init__(self):
@@ -50,6 +54,9 @@ class StandardFeedHandler(FeedHandler):
         # Store subaccounts by subaccount ID
         self.subaccounts: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount] = {}
 
+        # List of most recently updated subaccount ids
+        self.updated_subaccounts = []
+
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
         Handle a message from the gRPC feed, updating the local order book
@@ -61,6 +68,7 @@ class StandardFeedHandler(FeedHandler):
         [1] https://github.com/dydxprotocol/v4-chain/blob/432e711decf01b855cf5ca90b699c9b187399826/proto/dydxprotocol/clob/query.proto#L172-L175
         """
         collected_fills = []
+        self.updated_subaccounts = []
         for update in message.updates:
             # Each update is either an 'orderbook_update' or an 'order_fill'
             update_type = update.WhichOneof('update_message')
@@ -100,10 +108,14 @@ class StandardFeedHandler(FeedHandler):
         """
         parsed_subaccount = subaccounts.parse_subaccounts(update)
         subaccount_id = parsed_subaccount.subaccount_id
+        self.updated_subaccounts.append(subaccount_id)
 
         if update.snapshot:
+            # Skip subsequent snapshots. This will only happen if
+            # snapshot interval is turned on on the full node.
             if subaccount_id in self.subaccounts:
-                raise AssertionError(f"Saw multiple snapshots for subaccount id {subaccount_id}, expected exactly one")
+                logging.warning(f"Saw multiple snapshots for subaccount id {subaccount_id}")
+                return
             self.subaccounts[subaccount_id] = parsed_subaccount
         else:
             # Skip messages until the first snapshot is received
@@ -174,11 +186,13 @@ class StandardFeedHandler(FeedHandler):
         """
         # Skip messages until the first snapshot is received
         if not self.has_seen_first_snapshot and not update.snapshot:
+            logging.warning(f"Skipping update before first snapshot: {update}")
             return
 
         # Skip subsequent snapshots. This will only happen if
         # snapshot interval is turned on on the full node.
         if update.snapshot and self.has_seen_first_snapshot:
+            logging.warning(f"Skipping subsequent snapshot: {update}")
             return
 
         if update.snapshot:
@@ -303,6 +317,58 @@ class StandardFeedHandler(FeedHandler):
         """
         return self.subaccounts
 
+    def get_recent_subaccount_updates(self) -> Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount]:
+        """
+        Returns the subaccounts that were updated in the most recent message.
+        """
+        return {subaccount_id: self.subaccounts[subaccount_id] for subaccount_id in self.updated_subaccounts}
+
+    def compare_subaccounts(self, other) -> bool:
+        """
+        Compares the subaccounts between this feed handler and another.
+        Log mismatches.
+        """
+        self_subaccounts = self.get_subaccounts()
+        other_subaccounts = other.get_subaccounts()
+
+        if len(self_subaccounts) != len(other_subaccounts):
+            logging.error(
+                f"Subaccount length mismatch: self has {len(self_subaccounts)} subaccounts, "
+                f"other has {len(other_subaccounts)} subaccounts."
+            )
+
+        mismatched_subaccounts = {}
+        for subaccount_id, self_subaccount in self_subaccounts.items():
+            other_subaccount = other_subaccounts.get(subaccount_id)
+            if other_subaccount is None:
+                logging.error(f"Subaccount {subaccount_id} is present in self but missing in other.")
+                mismatched_subaccounts[subaccount_id] = (self_subaccount, None)
+            elif self_subaccount != other_subaccount:
+                mismatched_subaccounts[subaccount_id] = (self_subaccount, other_subaccount)
+
+        for subaccount_id, other_subaccount in other_subaccounts.items():
+            if subaccount_id not in self_subaccounts:
+                logging.error(f"Subaccount {subaccount_id} is present in other but missing in self.")
+                mismatched_subaccounts[subaccount_id] = (None, other_subaccount)
+
+        if mismatched_subaccounts:
+            for subaccount_id, (self_subaccount, other_subaccount) in mismatched_subaccounts.items():
+                if self_subaccount is None:
+                    logging.error(
+                        f"Subaccount {subaccount_id} is missing in self but present in other: {other_subaccount}")
+                elif other_subaccount is None:
+                    logging.error(
+                        f"Subaccount {subaccount_id} is missing in other but present in self: {self_subaccount}")
+                else:
+                    logging.error(
+                        f"Subaccount {subaccount_id} differs:\n"
+                        f"self: {self_subaccount}\n"
+                        f"other: {other_subaccount}"
+                    )
+            return False
+
+        return True
+
     def compare(self, other: StandardFeedHandler) -> bool:
         """
         Compares the two standard feed handlers. Returns a
@@ -322,5 +388,9 @@ class StandardFeedHandler(FeedHandler):
             comparison_failed = self_book.compare_books(other_book)
             if comparison_failed:
                 failed = True
-        # TODO compare subaccounts
+
+        subaccounts_match = self.compare_subaccounts(other)
+        if not subaccounts_match:
+            failed = True
+
         return not failed
