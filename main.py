@@ -61,7 +61,7 @@ async def listen_to_grpc_stream(
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
                     if conf['print_subaccounts']:
-                        print_subaccounts(feed_handler.get_subaccounts())
+                        print_subaccounts(feed_handler.get_recent_subaccount_updates())
                 except Exception as e:
                     logging.error(f"Error handling message: {json_format.MessageToJson(e, indent=None)}")
                     raise e
@@ -100,7 +100,7 @@ async def listen_to_websocket(
                     if conf['print_fills']:
                         print_fills(fill_events, cpid_to_market_info)
                     if conf['print_subaccounts']:
-                        print_subaccounts(feed_handler.get_subaccounts())
+                        print_subaccounts(feed_handler.get_recent_subaccount_updates())
                 except Exception as e:
                     logging.error(f"Error handling message: {str(response)}")
                     raise e
@@ -271,7 +271,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         params_str = "&".join(params)
         websocket_addr = f"ws://{host}:{websocket_port}/ws?{params_str}"
         # Connect to the websocket and start listening
-        async with websockets.connect(websocket_addr) as websocket:
+        async with websockets.connect(websocket_addr, ping_interval=None) as websocket:
             interval = conf['interval_ms']
             tasks = [
                 listen_to_websocket(
