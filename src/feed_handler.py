@@ -90,7 +90,7 @@ class StandardFeedHandler(FeedHandler):
         return collected_fills
 
     def _update_height(self, clob_pair_id: int, new_block_height: int):
-        if new_block_height <= 0:
+        if new_block_height < 0:
             raise ValueError(f"Invalid block height: {new_block_height}")
 
         if (clob_pair_id not in self.heights or
