@@ -24,6 +24,11 @@ class ValidationFeedHandler(FeedHandler):
 
         # Standard feed handler to maintain standard orderbook.
         self.standard_feed_handler = StandardFeedHandler()
+        # Store subaccounts by subaccount ID
+        self.subaccounts: Dict[subaccounts.SubaccountId, subaccounts.StreamSubaccount] = {}
+
+        # List of most recently updated subaccount ids
+        self.updated_subaccounts = []
 
     def handle(self, message: StreamOrderbookUpdatesResponse) -> List[fills.Fill]:
         """
@@ -52,6 +57,7 @@ class ValidationFeedHandler(FeedHandler):
                 logging.error("🔴 Validation Snapshot check failed")
         if is_snapshot and self.has_seen_first_snapshot == False:
             self.has_seen_first_snapshot = True
+        return []
 
     def get_books(self) -> Dict[int, lob.LimitOrderBook]:
         """
