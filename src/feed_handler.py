@@ -115,6 +115,7 @@ class StandardFeedHandler(FeedHandler):
             # snapshot interval is turned on on the full node.
             if subaccount_id in self.subaccounts:
                 logging.warning(f"Saw multiple snapshots for subaccount id {subaccount_id}")
+                self.updated_subaccounts.remove(subaccount_id)
                 return
             self.subaccounts[subaccount_id] = parsed_subaccount
         else:
