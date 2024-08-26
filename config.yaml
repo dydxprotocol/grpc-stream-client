@@ -1,7 +1,7 @@
 dydx_full_node:
-  host: 18.177.172.207 # fill in the IP address of your full node
+  host: 127.0.0.1 # fill in the IP address of your full node
   grpc_port: 9090
-  websocket_port: 9091
+  websocket_port: 9092
 use_grpc: true
 use_websocket: false
 stream_options:
@@ -9,13 +9,12 @@ stream_options:
     - 0
     - 1
   subaccount_ids:
-    - dydx15u3dtsf4twdxttvy7850dkex7tcf3ps2y8wcuf/0
-    - dydx14dltc2w6y3dhf0naz8luglsvjt0vhvswm2j6d0/0
+    - dydx1nzuttarf5k2j0nug5yzhr6p74t9avehn9hlh8m/0  # each subaccount id is string with format owner/number
+    - dydx199tqg4wdlnu4qjlxchpd7seg454937hjrknju4/0
 interval_ms: 1000 # Print book state every second
-indexer_api: http://mainnet-indexer-apne1-lb-public-2043015959.ap-northeast-1.elb.amazonaws.com
+indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversions
 log_stream_messages: feed.log # Log messages to this file each time main is run
-print_fills: true # Whether to print fills
-print_taker_orders: false
+print_fills: false # Whether to print fills
 print_books: false # Whether to print books
 print_subaccounts: true # Whether to print subaccounts
-validate_every_n_blocks: 25 # In validation mode, how many blocks between each orderbook check
+print_taker_orders: true # Whether to print taker orders
