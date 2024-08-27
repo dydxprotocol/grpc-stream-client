@@ -1,6 +1,9 @@
 Example Client for dYdX Full Node gRPC Streams
 ---
 
+**Note**: for compatibility with nodes running v5.2.X, please use [this repository at commit `4870796be19937ff4a50fd24647049ae51feb339`](https://github.com/dydxprotocol/grpc-stream-client/tree/4870796be19937ff4a50fd24647049ae51feb339) and ensure you have the correct protos for your node version by running `pip install v4-proto==5.2.2`.  
+
+
 Compatible with dYdX full nodes running [v5.0.5+](https://github.com/dydxprotocol/v4-chain/releases/tag/protocol%2Fv5.0.5) (includes fills).
 
 ### Setup
@@ -10,7 +13,7 @@ Compatible with dYdX full nodes running [v5.0.5+](https://github.com/dydxprotoco
     pip install -r requirements.txt
     vim config.yaml # Add your full node address etc.
 
-You first need a full node with [gRPC streaming enabled](https://docs.dydx.exchange/validators/full_node_streaming#enabling-grpc-streaming). 
+You first need a full node with [gRPC streaming enabled](https://docs.dydx.exchange/api_integration-full-node-streaming#enabling-streaming). 
 Add the full node address to the `config.yaml` file.
 
 ### Logic
