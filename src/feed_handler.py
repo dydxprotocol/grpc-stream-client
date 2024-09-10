@@ -84,7 +84,6 @@ class StandardFeedHandler(FeedHandler):
                 self._handle_taker_order(update.taker_order, height)
             elif update_type == 'subaccount_update':
                 self._handle_subaccounts(update.subaccount_update)
-                print(f"Subaccount update exec mode: {update.exec_mode}")
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
