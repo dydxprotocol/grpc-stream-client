@@ -84,6 +84,7 @@ class StandardFeedHandler(FeedHandler):
                 self._handle_taker_order(update.taker_order, height)
             elif update_type == 'subaccount_update':
                 self._handle_subaccounts(update.subaccount_update)
+                print(f"Subaccount update exec mode: {update.exec_mode}")
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
 
@@ -126,8 +127,10 @@ class StandardFeedHandler(FeedHandler):
             existing_subaccount = self.subaccounts[subaccount_id]
             # Update perpetual positions
             existing_subaccount.perpetual_positions.update(parsed_subaccount.perpetual_positions)
+            existing_subaccount.perpetual_positions = {k: v for k, v in parsed_subaccount.perpetual_positions.items() if v.quantums != 0}
             # Update asset positions
             existing_subaccount.asset_positions.update(parsed_subaccount.asset_positions)
+            existing_subaccount.asset_positions = {k: v for k, v in parsed_subaccount.asset_positions.items() if v.quantums != 0}
 
     def _handle_taker_order(
             self,
