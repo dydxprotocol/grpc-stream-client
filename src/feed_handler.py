@@ -388,8 +388,8 @@ class StandardFeedHandler(FeedHandler):
         for cpid in self_books.keys():
             self_book = self_books[cpid]
             other_book = other_books[cpid]
-            comparison_failed = self_book.compare_books(other_book)
-            if comparison_failed:
+            book_match = self_book.compare_books(other_book)
+            if not book_match:
                 failed = True
 
         subaccounts_match = self.compare_subaccounts(other)
