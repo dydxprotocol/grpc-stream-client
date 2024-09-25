@@ -160,7 +160,7 @@ class LimitOrderBook:
                 failed = True
 
         # Only compare mid price if both sides have orders.
-        if num_asks > 0 & num_bids > 0:
+        if num_asks > 0 and num_bids > 0:
             midpoint_price = self.get_midpoint_price()
             other_midpoint_price = other.get_midpoint_price()
             if midpoint_price != other_midpoint_price:
