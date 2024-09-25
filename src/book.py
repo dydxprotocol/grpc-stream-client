@@ -126,12 +126,14 @@ class LimitOrderBook:
         num_orders = len(self.oid_to_order_node)
         num_asks = len(self._asks)
         num_bids = len(self._bids)
-        midpoint_price = self.get_midpoint_price()
 
         other_num_orders = len(other.oid_to_order_node)
         other_num_asks = len(other._asks)
         other_num_bids = len(other._bids)
-        other_midpoint_price = other.get_midpoint_price()
+
+        # If order book is empty, return true vacuously. 
+        if num_orders == other_num_orders == 0:
+            return True
 
         if num_orders != other_num_orders:
             logging.error(f"FAIL: num orders: {num_orders} {other_num_orders}")
@@ -146,9 +148,6 @@ class LimitOrderBook:
         if num_bids != other_num_bids:
             logging.error(f"FAIL: num bids: {num_bids} {other_num_bids}")
             failed = True
-        if midpoint_price != other_midpoint_price:
-            logging.error(f"FAIL: midpoint price: {midpoint_price} {other_midpoint_price}")
-            failed = True
         for level, dll in self._asks.items():
             other_dll = other._asks[level]
             if not dll.is_equal(other_dll):
@@ -158,7 +157,16 @@ class LimitOrderBook:
             other_dll = other._bids[level]
             if not dll.is_equal(other_dll):
                 logging.error(f"FAIL: Bids Price level {level} mismatching orders")
-            failed = True
+                failed = True
+
+        # Only compare mid price if both sides have orders.
+        if num_asks > 0 and num_bids > 0:
+            midpoint_price = self.get_midpoint_price()
+            other_midpoint_price = other.get_midpoint_price()
+            if midpoint_price != other_midpoint_price:
+                logging.error(f"FAIL: midpoint price: {midpoint_price} {other_midpoint_price}")
+                failed = True
+
         return not failed
 
 def asks_bids_from_book(book: LimitOrderBook,) -> Tuple[List[Order], List[Order]]:
