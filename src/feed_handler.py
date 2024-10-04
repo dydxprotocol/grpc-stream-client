@@ -67,6 +67,7 @@ class StandardFeedHandler(FeedHandler):
 
         [1] https://github.com/dydxprotocol/v4-chain/blob/432e711decf01b855cf5ca90b699c9b187399826/proto/dydxprotocol/clob/query.proto#L172-L175
         """
+        # print('====handling message', message)
         collected_fills = []
         self.updated_subaccounts = []
         for update in message.updates:
@@ -78,6 +79,7 @@ class StandardFeedHandler(FeedHandler):
             elif update_type == 'order_fill':
                 fs = self._handle_fills(update.order_fill, update.exec_mode)
                 if fs:  # No fills parsed before snapshot
+                    # print(f'!! updating height in order_fill to {height}')
                     self._update_height(fs[0].clob_pair_id, height)
                 collected_fills += fs
             elif update_type == 'taker_order':
@@ -86,7 +88,8 @@ class StandardFeedHandler(FeedHandler):
                 self._handle_subaccounts(update.subaccount_update)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {update}")
-
+            
+        print('----finished base handling message')
         return collected_fills
 
     def _update_height(self, clob_pair_id: int, new_block_height: int):
@@ -217,7 +220,8 @@ class StandardFeedHandler(FeedHandler):
                 cpid = self._handle_order_remove(u.order_remove)
             else:
                 raise ValueError(f"Unknown update type '{update_type}' in: {u}")
-
+            
+            # print(f'!! updating height for {update_type} to {block_height}')
             self._update_height(cpid, block_height)
 
         self._validate_books()

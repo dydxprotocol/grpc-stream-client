@@ -1,8 +1,8 @@
-grpcio==1.64.1
-grpcio-tools==1.64.1
-protobuf==5.26.1
+grpcio==1.66.1
+grpcio-tools==1.66.1
+protobuf==5.28.1
 PyYAML==6.0.1
 sortedcontainers==2.4.0
-v4-proto==5.2.0.dev1
+v4-proto==6.0.3.dev0
 requests~=2.32.2
 websockets==12.0
