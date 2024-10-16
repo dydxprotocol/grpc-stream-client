@@ -189,13 +189,12 @@ class StandardFeedHandler(FeedHandler):
         """
         # Skip messages until the first snapshot is received
         if not self.has_seen_first_snapshot and not update.snapshot:
-            logging.warning(f"Skipping update before first snapshot: {update}")
             return
 
         # Skip subsequent snapshots. This will only happen if
         # snapshot interval is turned on on the full node.
         if update.snapshot and self.has_seen_first_snapshot:
-            logging.warning(f"Skipping subsequent snapshot: {update}")
+            logging.warning(f"Skipping subsequent snapshot.")
             return
 
         if update.snapshot:
@@ -324,7 +323,10 @@ class StandardFeedHandler(FeedHandler):
         """
         Returns the subaccounts that were updated in the most recent message.
         """
-        return {subaccount_id: self.subaccounts[subaccount_id] for subaccount_id in self.updated_subaccounts}
+        return { subaccount_id: self.subaccounts[subaccount_id]
+            for subaccount_id in self.updated_subaccounts
+            if subaccount_id in self.subaccounts
+        }
 
     def compare_subaccounts(self, other) -> bool:
         """
