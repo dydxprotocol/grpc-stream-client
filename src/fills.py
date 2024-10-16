@@ -80,6 +80,7 @@ def parse_pb_id(oid: OrderId) -> lob.OrderId:
 def parse_acc_id(acc_id: SubaccountId) -> lob.OrderId:
     """
     Parse an order ID from a subaccount id, filling in the client ID with 0.
+    Fills the order flags with 9999.
 
     This is used for liquidations and deleveraging, where the orders are
     protocol-generated and don't have client IDs.
@@ -88,6 +89,7 @@ def parse_acc_id(acc_id: SubaccountId) -> lob.OrderId:
         owner_address=acc_id.owner,
         subaccount_number=acc_id.number,
         client_id=0,
+        order_flags=9999
     )
 
 
