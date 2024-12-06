@@ -271,7 +271,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         params_str = "&".join(params)
         websocket_addr = f"ws://{host}:{websocket_port}/ws?{params_str}"
         # Connect to the websocket and start listening
-        async with websockets.connect(websocket_addr, ping_interval=None) as websocket:
+        async with websockets.connect(websocket_addr, ping_interval=None, max_size=8_388_608) as websocket:
             interval = conf['interval_ms']
             tasks = [
                 listen_to_websocket(
