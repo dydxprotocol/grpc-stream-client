@@ -3,7 +3,7 @@ from src.book import OrderId, Order, LimitOrderBook
 
 
 def o(addr, subacc, cid, is_bid, quantums, subticks):
-    return Order(OrderId(addr, subacc, cid), is_bid, quantums, quantums, subticks)
+    return Order(OrderId(addr, subacc, cid, 0), is_bid, quantums, quantums, subticks)
 
 
 class TestLimitOrderBook(unittest.TestCase):
@@ -53,11 +53,11 @@ class TestLimitOrderBook(unittest.TestCase):
             self.lob.add_order(order)
 
         # Remove an order and check the state
-        self.lob.remove_order(OrderId("address1", 1, 101))
-        self.assertTrue(OrderId("address1", 1, 101) not in self.lob._bids[50])
+        self.lob.remove_order(OrderId("address1", 1, 101, 0))
+        self.assertTrue(OrderId("address1", 1, 101, 0) not in self.lob._bids[50])
 
-        self.lob.remove_order(OrderId("address3", 1, 103))
-        self.assertTrue(OrderId("address3", 1, 103) not in self.lob._asks[51])
+        self.lob.remove_order(OrderId("address3", 1, 103, 0))
+        self.assertTrue(OrderId("address3", 1, 103, 0) not in self.lob._asks[51])
 
         # Verify remaining orders maintain the correct order
         remaining_bid = self.lob._bids[50].head.data
