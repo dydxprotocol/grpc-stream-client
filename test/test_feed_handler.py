@@ -74,14 +74,14 @@ class TestFeedHandler(unittest.TestCase):
 
         # Check best bid and ask prices and sizes
         best_bid: lob.Order = next(self.snapshot_state.books[0].bids())
-        self.assertEqual(130932877, best_bid.order_id.client_id)
-        self.assertEqual(500000000, best_bid.quantums)
-        self.assertEqual(6037200000, best_bid.subticks)
+        self.assertEqual(900722659, best_bid.order_id.client_id)
+        self.assertEqual(839000000, best_bid.quantums)
+        self.assertEqual(10033200000, best_bid.subticks)
 
         best_ask: lob.Order = next(self.snapshot_state.books[0].asks())
-        self.assertEqual(130932874, best_ask.order_id.client_id)
-        self.assertEqual(30000000, best_ask.quantums)
-        self.assertEqual(6037300000, best_ask.subticks)
+        self.assertEqual(1393832, best_ask.order_id.client_id)
+        self.assertEqual(896000000, best_ask.quantums)
+        self.assertEqual(10033300000, best_ask.subticks)
 
 
 def asks_bids_from_feed(
