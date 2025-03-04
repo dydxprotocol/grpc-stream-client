@@ -29,11 +29,16 @@ required-version = ">=0.5.0"
 
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.format]
 exclude = [
     ".mypy_cache",
     ".venv",
     "venv",
 ]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
 
 [tool.mypy]
 ignore_missing_imports = true
