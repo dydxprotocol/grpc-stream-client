@@ -29,3 +29,12 @@ jobs:
         
     - name: Test with python ${{ matrix.python-version }}
       run: uv run --frozen pytest
+
+    - name: mypy
+      run: uv run mypy --check-untyped-defs ./
+
+    - name: ruff lint
+      run: uv run ruff check
+
+    - name: ruff format
+      run: uv run ruff format
