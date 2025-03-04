@@ -55,7 +55,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dydx-v4-grpc-streaming-client"
+name = "grpc-stream-client"
 version = "0.2.0"
 source = { virtual = "." }
 dependencies = [

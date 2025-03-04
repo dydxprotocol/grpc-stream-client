@@ -1,3 +1,17 @@
+#!/usr/bin/env -S UV_PROJECT_ENVIRONMENT=.venv uv run
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#    "grpcio>=1.67.0",
+#    "grpcio-tools==1.64.1",
+#    "protobuf==5.28.1",
+#    "pyyaml==6.0.1",
+#    "requests~=2.32.2",
+#    "sortedcontainers==2.4.0",
+#    "v4-proto==6.0.8",
+#    "websockets==12.0",
+# ]
+# ///
 import asyncio
 import logging
 

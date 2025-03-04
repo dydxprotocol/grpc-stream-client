@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run
+#!/usr/bin/env -S UV_PROJECT_ENVIRONMENT=.venv uv run
 # /// script
 # requires-python = ">=3.9"
 # dependencies = [
@@ -47,6 +47,7 @@ import grpc_stream_client.config as config
 import grpc_stream_client.fills as fills
 import grpc_stream_client.subaccounts as subaccounts
 
+# TODO deprecate
 conf = config.Config().get_config()
 
 
@@ -341,7 +342,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         logging.error("Must specify use_grpc or use_websocket in config.yaml")
 
 
-if __name__ == "__main__":
+def cli():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -359,8 +360,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logging.info(f"Starting with conf: {conf}")
-
     id_to_info = query_market_info(conf["indexer_api"])
     logging.info(f"Got market info: {id_to_info}")
-
     asyncio.run(main(vars(args), id_to_info))
+
+
+if __name__ == "__main__":
+    cli()

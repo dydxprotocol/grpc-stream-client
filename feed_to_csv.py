@@ -1,3 +1,17 @@
+#!/usr/bin/env -S UV_PROJECT_ENVIRONMENT=.venv uv run
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#    "grpcio>=1.67.0",
+#    "grpcio-tools==1.64.1",
+#    "protobuf==5.28.1",
+#    "pyyaml==6.0.1",
+#    "requests~=2.32.2",
+#    "sortedcontainers==2.4.0",
+#    "v4-proto==6.0.8",
+#    "websockets==12.0",
+# ]
+# ///
 """
 This script reads a JSON or protobuf log file with feed messages and writes out
 an unnested CSV with concise message lines that can be more easily read in
@@ -9,7 +23,8 @@ Usage:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
+import argparse
 import csv
 import datetime
 import sys
@@ -222,15 +237,30 @@ def parse_order_fills(ts, height, mode, order_fill: StreamOrderbookFill):
     return events
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3 or sys.argv[1] not in ["json", "proto"]:
-        print("Converts a JSON or protobuf log file to an un-nested CSV on stdout")
-        print("Usage: python feed_to_csv.py [json|proto] <in_file>")
-        sys.exit(1)
+class Args(argparse.Namespace):
+    input_filename: Path
+    format: Literal["json", "proto"]
 
-    from_format = Path(sys.argv[1])
-    from_file = Path(sys.argv[2])
-    if from_format == "json":
-        json_log_to_csv(from_file)
-    elif from_format == "proto":
-        proto_log_to_csv(from_file)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Converts a JSON or protobuf log file to an un-nested CSV on stdout",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "input_filename",
+        type=Path,
+        help="input filename",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["json", "proto"],
+        default="json",
+        help="output to JSON or protobuf log",
+    )
+    args = parser.parse_args(namespace=Args)
+
+    if args.format == "json":
+        json_log_to_csv(args.input_filename)
+    elif args.format == "proto":
+        proto_log_to_csv(args.input_filename)

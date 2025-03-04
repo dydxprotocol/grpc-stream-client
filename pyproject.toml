@@ -1,5 +1,5 @@
 [project]
-name = "dydx-v4-grpc-streaming-client"
+name = "grpc-stream-client"
 version = "0.2.0"
 description = "dYdX V4 grpc full node streaming client"
 readme = "README.md"
