@@ -1,10 +1,11 @@
-import unittest
 from decimal import Decimal
+from dataclasses import dataclass
+import unittest
 
 from google.protobuf import json_format
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookFill
 
-from src.fills import parse_fill, FillType
+from grpc_stream_client.fills import parse_fill, FillType
+from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookFill
 
 # Example fill taken from the stream, encoded as JSON
 FILL_JSON = """
@@ -116,6 +117,26 @@ FILL_EXEC_MODE = 7
 CLOB_PAIR_ID = 0  # Assuming CLOB pair ID is 0 for this test
 
 
+@dataclass(frozen=True)
+class SubaccountId:
+    owner_address: str
+    subaccount_number: int
+    client_id: int
+
+
+@dataclass(frozen=True)
+class Fill:
+    clob_pair_id: int
+    maker: SubaccountId
+    taker: SubaccountId
+    maker_total_filled_quantums: Decimal
+    quantums: Decimal
+    subticks: Decimal
+    taker_is_buy: bool
+    exec_mode: int
+    fill_type: FillType
+
+
 class TestFills(unittest.TestCase):
     def test_parse_fill(self):
         # Construct a StreamOrderbookUpdatesResponse message from JSON
@@ -126,84 +147,84 @@ class TestFills(unittest.TestCase):
         fills = parse_fill(msg, FILL_EXEC_MODE)
 
         # Define expected output
-        expected_fills = [
-            {
-                'clob_pair_id': CLOB_PAIR_ID,
-                'maker': {
-                    'owner_address': 'dydx100l9m6g70j28g2tk3jj4plmge8vsmj6jdrlzhk',
-                    'subaccount_number': 1,
-                    'client_id': 533425689
-                },
-                'taker': {
-                    'owner_address': 'dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn',
-                    'subaccount_number': 0,
-                    'client_id': 1368487720
-                },
-                'maker_total_filled_quantums': Decimal('1527000000'),
-                'quantums': Decimal('1527000000'),
-                'subticks': Decimal('6545800000'),
-                'taker_is_buy': True,
-                'exec_mode': FILL_EXEC_MODE,
-                'fill_type': FillType.NORMAL,
-            },
-            {
-                'clob_pair_id': CLOB_PAIR_ID,
-                'maker': {
-                    'owner_address': 'dydx1q869gyjwanxhw5xdgfg67pg3y8gjeuzth6u6zl',
-                    'subaccount_number': 0,
-                    'client_id': 1188620611
-                },
-                'taker': {
-                    'owner_address': 'dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn',
-                    'subaccount_number': 0,
-                    'client_id': 1368487720
-                },
-                'maker_total_filled_quantums': Decimal('1109000000'),
-                'quantums': Decimal('1109000000'),
-                'subticks': Decimal('6545900000'),
-                'taker_is_buy': True,
-                'exec_mode': FILL_EXEC_MODE,
-                'fill_type': FillType.NORMAL,
-            },
-            {
-                'clob_pair_id': CLOB_PAIR_ID,
-                'maker': {
-                    'owner_address': 'dydx17z3prca48l3c93wtlfp69p25gze45uey57z667',
-                    'subaccount_number': 0,
-                    'client_id': 1796902745
-                },
-                'taker': {
-                    'owner_address': 'dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn',
-                    'subaccount_number': 0,
-                    'client_id': 1368487720
-                },
-                'maker_total_filled_quantums': Decimal('3055000000'),
-                'quantums': Decimal('3055000000'),
-                'subticks': Decimal('6545900000'),
-                'taker_is_buy': True,
-                'exec_mode': FILL_EXEC_MODE,
-                'fill_type': FillType.NORMAL,
-            }
+        expected_fills: list[Fill] = [
+            Fill(
+                clob_pair_id=CLOB_PAIR_ID,
+                maker=SubaccountId(
+                    owner_address="dydx100l9m6g70j28g2tk3jj4plmge8vsmj6jdrlzhk",
+                    subaccount_number=1,
+                    client_id=533425689,
+                ),
+                taker=SubaccountId(
+                    owner_address="dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn",
+                    subaccount_number=0,
+                    client_id=1368487720,
+                ),
+                maker_total_filled_quantums=Decimal("1527000000"),
+                quantums=Decimal("1527000000"),
+                subticks=Decimal("6545800000"),
+                taker_is_buy=True,
+                exec_mode=FILL_EXEC_MODE,
+                fill_type=FillType.NORMAL,
+            ),
+            Fill(
+                clob_pair_id=CLOB_PAIR_ID,
+                maker=SubaccountId(
+                    owner_address="dydx1q869gyjwanxhw5xdgfg67pg3y8gjeuzth6u6zl",
+                    subaccount_number=0,
+                    client_id=1188620611,
+                ),
+                taker=SubaccountId(
+                    owner_address="dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn",
+                    subaccount_number=0,
+                    client_id=1368487720,
+                ),
+                maker_total_filled_quantums=Decimal("1109000000"),
+                quantums=Decimal("1109000000"),
+                subticks=Decimal("6545900000"),
+                taker_is_buy=True,
+                exec_mode=FILL_EXEC_MODE,
+                fill_type=FillType.NORMAL,
+            ),
+            Fill(
+                clob_pair_id=CLOB_PAIR_ID,
+                maker=SubaccountId(
+                    owner_address="dydx17z3prca48l3c93wtlfp69p25gze45uey57z667",
+                    subaccount_number=0,
+                    client_id=1796902745,
+                ),
+                taker=SubaccountId(
+                    owner_address="dydx15m3lvgfwe4xad7wqyskvn6qz5w5ahue60hhemn",
+                    subaccount_number=0,
+                    client_id=1368487720,
+                ),
+                maker_total_filled_quantums=Decimal("3055000000"),
+                quantums=Decimal("3055000000"),
+                subticks=Decimal("6545900000"),
+                taker_is_buy=True,
+                exec_mode=FILL_EXEC_MODE,
+                fill_type=FillType.NORMAL,
+            ),
         ]
 
         # Verify the parsed fills
         self.assertEqual(len(fills), len(expected_fills))
 
         for fill, expected_fill in zip(fills, expected_fills):
-            self.assertEqual(fill.clob_pair_id, expected_fill['clob_pair_id'])
-            self.assertEqual(fill.maker.owner_address, expected_fill['maker']['owner_address'])
-            self.assertEqual(fill.maker.subaccount_number, expected_fill['maker']['subaccount_number'])
-            self.assertEqual(fill.maker.client_id, expected_fill['maker']['client_id'])
-            self.assertEqual(fill.taker.owner_address, expected_fill['taker']['owner_address'])
-            self.assertEqual(fill.taker.subaccount_number, expected_fill['taker']['subaccount_number'])
-            self.assertEqual(fill.taker.client_id, expected_fill['taker']['client_id'])
-            self.assertEqual(fill.maker_total_filled_quantums, expected_fill['maker_total_filled_quantums'])
-            self.assertEqual(fill.quantums, expected_fill['quantums'])
-            self.assertEqual(fill.subticks, expected_fill['subticks'])
-            self.assertEqual(fill.taker_is_buy, expected_fill['taker_is_buy'])
-            self.assertEqual(fill.exec_mode, expected_fill['exec_mode'])
-            self.assertEqual(fill.fill_type, expected_fill['fill_type'])
+            self.assertEqual(fill.clob_pair_id, expected_fill.clob_pair_id)
+            self.assertEqual(fill.maker.owner_address, expected_fill.maker.owner_address)
+            self.assertEqual(fill.maker.subaccount_number, expected_fill.maker.subaccount_number)
+            self.assertEqual(fill.maker.client_id, expected_fill.maker.client_id)
+            self.assertEqual(fill.taker.owner_address, expected_fill.taker.owner_address)
+            self.assertEqual(fill.taker.subaccount_number, expected_fill.taker.subaccount_number)
+            self.assertEqual(fill.taker.client_id, expected_fill.taker.client_id)
+            self.assertEqual(fill.maker_total_filled_quantums, expected_fill.maker_total_filled_quantums)
+            self.assertEqual(fill.quantums, expected_fill.quantums)
+            self.assertEqual(fill.subticks, expected_fill.subticks)
+            self.assertEqual(fill.taker_is_buy, expected_fill.taker_is_buy)
+            self.assertEqual(fill.exec_mode, expected_fill.exec_mode)
+            self.assertEqual(fill.fill_type, expected_fill.fill_type)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

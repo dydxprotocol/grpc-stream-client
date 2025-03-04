@@ -1,41 +1,34 @@
-"""
-Connect to a full node gRPC feed and print the messages as JSON.
-"""
 import asyncio
+import logging
 
-import grpc
 from google.protobuf.json_format import MessageToJson
-# Classes generated from the proto files
+import grpc  # type: ignore
+
+from grpc_stream_client.config import Config
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
-import src.config as config
+logger = logging.getLogger(__name__)
 
 
-async def main(conf: dict):
-    host = conf['dydx_full_node']['grpc_host']
-    port = conf['dydx_full_node']['grpc_port']
-    clob_pair_ids = conf['stream_options']['clob_pair_ids']
+async def main(host: str, port: int, clob_pair_ids: list[int]):
     addr = f"{host}:{port}"
-
-    # Connect to the gRPC feed and start listening
-    # (adjust to use secure channel if needed)
     async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
         try:
             stub = QueryStub(channel)
             request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
             async for response in stub.StreamOrderbookUpdates(request):
-                print(MessageToJson(response, indent=None))
+                logger.info(MessageToJson(response, indent=None))
                 # Alternatively, print like this for gRPC string format
                 # print(response)
-            print("Stream ended")
+            logger.info("Stream ended")
         except grpc.aio.AioRpcError as e:
-            print(f"gRPC error occurred: {e.code()} - {e.details()}")
+            logger.info(f"gRPC error occurred: {e.code()} - {e.details()}")
         except Exception as e:
-            print(f"Unexpected error in stream: {e}")
+            logger.info(f"Unexpected error in stream: {e}")
 
 
 if __name__ == "__main__":
-    c = config.Config().get_config()
-    print("Starting with conf:", c)
-    asyncio.run(main(c))
+    config = Config().get_config()
+    logger.info("Starting with conf:", config)
+    asyncio.run(main(config["host"], config["port"], config["clob_pair_ids"]))
