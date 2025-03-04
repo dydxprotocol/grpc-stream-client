@@ -41,7 +41,6 @@ async def fetch_orderbook_snapshot(
     address, _ = config.get_addr_and_cpids()
     async with grpc.aio.insecure_channel(address, config.GRPC_OPTIONS) as channel:
         try:
-            
             stub = QueryStub(channel)
             request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
             response: StreamOrderbookUpdatesResponse

@@ -5,9 +5,7 @@ import datetime
 from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse
 
 
-def append_message_to_log(
-    log: BinaryIO, message: StreamOrderbookUpdatesResponse, timestamp: datetime.datetime
-):
+def append_message_to_log(log: BinaryIO, message: StreamOrderbookUpdatesResponse, timestamp: datetime.datetime):
     """
     Binary serialize the message and append it to the log file, prefixed by the
     timestamp (6 bytes for milliseconds) and message length (4 bytes).

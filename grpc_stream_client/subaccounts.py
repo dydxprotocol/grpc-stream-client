@@ -40,9 +40,7 @@ def parse_subaccounts(
     )
 
     perpetual_positions = {
-        pos.perpetual_id: SubaccountPerpetualPosition(
-            perpetual_id=pos.perpetual_id, quantums=pos.quantums
-        )
+        pos.perpetual_id: SubaccountPerpetualPosition(perpetual_id=pos.perpetual_id, quantums=pos.quantums)
         for pos in stream_subaccount_update.updated_perpetual_positions
     }
 

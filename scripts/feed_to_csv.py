@@ -87,9 +87,7 @@ def json_log_to_csv(in_path: Path):
             message = StreamOrderbookUpdatesResponse()
             json_format.Parse(line, message)
             for event in feed_msg_to_events(message, None):
-                writer.writerow(
-                    [getattr(event, field) for field in Event.__dataclass_fields__.keys()]
-                )
+                writer.writerow([getattr(event, field) for field in Event.__dataclass_fields__.keys()])
 
 
 def proto_log_to_csv(in_path: Path):
@@ -102,14 +100,10 @@ def proto_log_to_csv(in_path: Path):
         writer.writerow(Event.__dataclass_fields__.keys())
         while (message := read_message_from_log(log)) is not None:
             for event in feed_msg_to_events(message[1], message[0]):
-                writer.writerow(
-                    [getattr(event, field) for field in Event.__dataclass_fields__.keys()]
-                )
+                writer.writerow([getattr(event, field) for field in Event.__dataclass_fields__.keys()])
 
 
-def feed_msg_to_events(
-    message: StreamOrderbookUpdatesResponse, ts: Optional[datetime.datetime | str]
-) -> list[Event]:
+def feed_msg_to_events(message: StreamOrderbookUpdatesResponse, ts: Optional[datetime.datetime | str]) -> list[Event]:
     """Parse a message from the gRPC feed into a list of event line items"""
     if ts is None:
         ts_str = datetime.datetime.now().isoformat()

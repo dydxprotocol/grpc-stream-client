@@ -64,9 +64,7 @@ class TestFeedHandler(unittest.TestCase):
         assert prev_msg is not None
         assert idx is not None
         self.assertIsNotNone(idx, "snapshot not found in feed")
-        self.assertGreater(
-            idx, 0, "this test only makes sense if the snapshot isn't the first message"
-        )
+        self.assertGreater(idx, 0, "this test only makes sense if the snapshot isn't the first message")
         self.snapshot_state = snap
 
         # Load the full feed from t0 through the message preceding the snapshot
@@ -92,9 +90,7 @@ class TestFeedHandler(unittest.TestCase):
         self.assertEqual(10033300000, best_ask.subticks)
 
 
-def asks_bids_from_feed(
-    feed_handler: StandardFeedHandler, clob_pair_id: int
-) -> Tuple[List[Order], List[Order]]:
+def asks_bids_from_feed(feed_handler: StandardFeedHandler, clob_pair_id: int) -> Tuple[List[Order], List[Order]]:
     book = feed_handler.get_books().get(clob_pair_id, None)
     if not book:
         return [], []

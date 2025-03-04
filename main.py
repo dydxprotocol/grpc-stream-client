@@ -69,8 +69,7 @@ async def listen_to_grpc_stream(
         stub = QueryStub(channel)
         # parse subaccount ids, each subaccount id is string with format owner/number
         subaccount_protos = [
-            SubaccountId(owner=sa.split("/")[0], number=int(sa.split("/")[1]))
-            for sa in subaccount_ids
+            SubaccountId(owner=sa.split("/")[0], number=int(sa.split("/")[1])) for sa in subaccount_ids
         ]
         request = StreamOrderbookUpdatesRequest(
             clob_pair_id=clob_pair_ids,
@@ -316,9 +315,7 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         params_str = "&".join(params)
         websocket_addr = f"ws://{host}:{websocket_port}/ws?{params_str}"
         # Connect to the websocket and start listening
-        async with websockets.connect(
-            websocket_addr, ping_interval=None, max_size=8_388_608
-        ) as websocket:
+        async with websockets.connect(websocket_addr, ping_interval=None, max_size=8_388_608) as websocket:
             interval = conf["interval_ms"]
             tasks = [
                 listen_to_websocket(

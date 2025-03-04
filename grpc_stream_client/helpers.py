@@ -85,7 +85,7 @@ def is_snapshot_update(update: StreamUpdate) -> bool:
         return update.subaccount_update.snapshot
     else:
         raise ValueError(f"Unknown update type '{update_type}' in: {update}")
-    
+
 
 def has_snapshot_update(response: StreamOrderbookUpdatesResponse) -> bool:
     for update in response.updates:

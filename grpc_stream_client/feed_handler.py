@@ -95,9 +95,7 @@ class StandardFeedHandler(FeedHandler):
         if clob_pair_id not in self.block_heights or new_block_height >= self.block_heights[clob_pair_id]:
             self.block_heights[clob_pair_id] = new_block_height
         else:
-            raise ValueError(
-                f"Block height decreased from {self.block_heights[clob_pair_id]} to {new_block_height}"
-            )
+            raise ValueError(f"Block height decreased from {self.block_heights[clob_pair_id]} to {new_block_height}")
 
     def _handle_subaccounts(self, update: StreamSubaccountUpdate):
         """Handle the StreamSubaccountUpdate message, updating the local subaccount state"""
@@ -301,9 +299,7 @@ class StandardFeedHandler(FeedHandler):
         for subaccount_id, self_subaccount in self_subaccounts.items():
             other_subaccount = other_subaccounts.get(subaccount_id)
             if other_subaccount is None:
-                logging.error(
-                    f"Subaccount {subaccount_id} is present in self but missing in other."
-                )
+                logging.error(f"Subaccount {subaccount_id} is present in self but missing in other.")
                 mismatched_subaccounts[subaccount_id] = (self_subaccount, None)
             elif self_subaccount != other_subaccount:
                 mismatched_subaccounts[subaccount_id] = (
@@ -313,9 +309,7 @@ class StandardFeedHandler(FeedHandler):
 
         for subaccount_id, other_subaccount in other_subaccounts.items():
             if subaccount_id not in self_subaccounts:
-                logging.error(
-                    f"Subaccount {subaccount_id} is present in other but missing in self."
-                )
+                logging.error(f"Subaccount {subaccount_id} is present in other but missing in self.")
                 mismatched_subaccounts[subaccount_id] = (None, other_subaccount)
 
         if mismatched_subaccounts:
@@ -333,9 +327,7 @@ class StandardFeedHandler(FeedHandler):
                     )
                 else:
                     logging.error(
-                        f"Subaccount {subaccount_id} differs:\n"
-                        f"self: {self_subaccount_}\n"
-                        f"other: {other_subaccount_}"
+                        f"Subaccount {subaccount_id} differs:\nself: {self_subaccount_}\nother: {other_subaccount_}"
                     )
             return False
 
@@ -351,9 +343,7 @@ class StandardFeedHandler(FeedHandler):
         self_books = self.get_books()
         other_books = other.get_books()
         if len(self_books) != len(other_books):
-            logging.error(
-                f"Mismatched book clob pair ids: \n{self_books.keys()}\n{other_books.keys()}"
-            )
+            logging.error(f"Mismatched book clob pair ids: \n{self_books.keys()}\n{other_books.keys()}")
             return False
 
         for cpid in self_books.keys():

@@ -46,8 +46,7 @@ def parse_fill(order_fill: StreamOrderbookFill, exec_mode: int) -> List[Fill]:
     #       the node).
     # This is shaped id -> (order state, total fill amount)
     order_states_at_fill_time = {
-        parse_pb_id(o.order_id): (o, tfa)
-        for (o, tfa) in zip(order_fill.orders, order_fill.fill_amounts)
+        parse_pb_id(o.order_id): (o, tfa) for (o, tfa) in zip(order_fill.orders, order_fill.fill_amounts)
     }
 
     # Normal fill
@@ -57,7 +56,7 @@ def parse_fill(order_fill: StreamOrderbookFill, exec_mode: int) -> List[Fill]:
         return parse_liquidations(exec_mode, clob_match, order_states_at_fill_time)
     elif match_type == "match_perpetual_deleveraging":
         return parse_deleveraging_fills(exec_mode, clob_match)
-    
+
     raise ValueError("match_type was not in {match_orders, match_perpetual_liquidation, match_perpetual_deleveraging}")
 
 
