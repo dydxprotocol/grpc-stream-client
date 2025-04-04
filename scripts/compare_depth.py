@@ -1,8 +1,16 @@
 """
 Subscribe to the gRPC stream, await a book snapshot, then query an Indexer
 book snapshot and output a comparison.
+
+To run this:
+
+    1. Update config.yaml with the appropriate parameters.
+    2. Run the script `python scripts/compare_depth.py`. It will save data as TICKER.json.
+    3. Open the compare_depth.ipynb notebook.
+    4. Fill in the `ticker` variable and run the rest of the cells.
 """
 import asyncio
+import json
 import logging
 from typing import Dict, List
 
@@ -73,6 +81,7 @@ async def get_indexer_book_snapshot(session: aiohttp.ClientSession, ticker: str)
         rjs = await response.json()
         return ticker, rjs
 
+
 async def main(cpid_to_market_info: dict[int, dict]):
     cpids = conf['stream_options']['clob_pair_ids']
     grpc_addr = f"{conf['dydx_full_node']['host']}:{conf['dydx_full_node']['grpc_port']}"
@@ -104,6 +113,16 @@ async def main(cpid_to_market_info: dict[int, dict]):
 
         print(f"Indexer book for {ticker}:")
         print(indexer_books[ticker])
+
+        # write the json data to a file named after the ticker
+        with open(f"{ticker}.json", "w") as f:
+            f.write(json.dumps(
+                {
+                    "grpc": grpc_book_to_data(book, atomic_resolution, qce),
+                    "indexer": indexer_books[ticker]
+                },
+                indent=4
+            ))
 
 if __name__ == "__main__":
     logging.basicConfig(
