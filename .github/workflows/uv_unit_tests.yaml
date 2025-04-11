@@ -1,0 +1,40 @@
+name: Unit Tests (UV)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      
+    - name: Install uv package manager
+      uses: astral-sh/setup-uv@v5
+      with:
+        pyproject-file: "pyproject.toml"
+        python-version: ${{ matrix.python-version }}
+        github-token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+        
+    - name: Test with python ${{ matrix.python-version }}
+      run: uv run --frozen pytest
+
+    - name: mypy
+      run: uv run mypy --check-untyped-defs ./
+
+    - name: ruff lint
+      run: uv run ruff check
+
+    - name: ruff format
+      run: uv run ruff format
