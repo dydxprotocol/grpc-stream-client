@@ -1,13 +1,16 @@
 import unittest
-from src.subaccounts import (
-    SubaccountId, SubaccountPerpetualPosition,
-    SubaccountAssetPosition, StreamSubaccount, parse_subaccounts
+
+from grpc_stream_client.subaccounts import (
+    SubaccountId,
+    SubaccountPerpetualPosition,
+    SubaccountAssetPosition,
+    StreamSubaccount,
+    parse_subaccounts,
 )
 from v4_proto.dydxprotocol.subaccounts.streaming_pb2 import StreamSubaccountUpdate
 
 
 class TestSubaccounts(unittest.TestCase):
-
     def test_parse_subaccounts(self):
         # Mock the StreamSubaccountUpdate protobuf message
         mock_update = StreamSubaccountUpdate()
@@ -25,7 +28,7 @@ class TestSubaccounts(unittest.TestCase):
         expected_subaccount = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress1", subaccount_number=1),
             perpetual_positions={101: SubaccountPerpetualPosition(perpetual_id=101, quantums=1000)},
-            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)}
+            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)},
         )
 
         parsed_subaccount = parse_subaccounts(mock_update)
@@ -36,13 +39,13 @@ class TestSubaccounts(unittest.TestCase):
         subaccount1 = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress1", subaccount_number=1),
             perpetual_positions={101: SubaccountPerpetualPosition(perpetual_id=101, quantums=1000)},
-            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)}
+            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)},
         )
 
         subaccount2 = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress1", subaccount_number=1),
             perpetual_positions={101: SubaccountPerpetualPosition(perpetual_id=101, quantums=1000)},
-            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)}
+            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)},
         )
 
         # Test equality
@@ -56,7 +59,7 @@ class TestSubaccounts(unittest.TestCase):
         subaccount2 = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress1", subaccount_number=1),
             perpetual_positions={101: SubaccountPerpetualPosition(perpetual_id=101, quantums=1000)},
-            asset_positions={203: SubaccountAssetPosition(asset_id=203, quantums=5000)}
+            asset_positions={203: SubaccountAssetPosition(asset_id=203, quantums=5000)},
         )
         self.assertNotEqual(subaccount1, subaccount2)
 
@@ -64,29 +67,29 @@ class TestSubaccounts(unittest.TestCase):
         subaccount1 = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress1", subaccount_number=1),
             perpetual_positions={101: SubaccountPerpetualPosition(perpetual_id=101, quantums=1000)},
-            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)}
+            asset_positions={202: SubaccountAssetPosition(asset_id=202, quantums=5000)},
         )
 
         subaccount2 = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress2", subaccount_number=2),
             perpetual_positions={102: SubaccountPerpetualPosition(perpetual_id=102, quantums=2000)},
-            asset_positions={203: SubaccountAssetPosition(asset_id=203, quantums=6000)}
+            asset_positions={203: SubaccountAssetPosition(asset_id=203, quantums=6000)},
         )
 
         subaccount3 = StreamSubaccount(
             subaccount_id=SubaccountId(owner_address="0xAddress3", subaccount_number=2),
             perpetual_positions={102: SubaccountPerpetualPosition(perpetual_id=102, quantums=2000)},
-            asset_positions={203: SubaccountAssetPosition(asset_id=203, quantums=6000)}
+            asset_positions={203: SubaccountAssetPosition(asset_id=203, quantums=6000)},
         )
 
         dict1 = {
             subaccount1.subaccount_id: subaccount1,
-            subaccount2.subaccount_id: subaccount2
+            subaccount2.subaccount_id: subaccount2,
         }
 
         dict2 = {
             subaccount1.subaccount_id: subaccount1,
-            subaccount2.subaccount_id: subaccount2
+            subaccount2.subaccount_id: subaccount2,
         }
 
         # Test equality
@@ -96,5 +99,5 @@ class TestSubaccounts(unittest.TestCase):
         self.assertNotEqual(dict1, dict2)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -30,40 +30,46 @@ If the feed states do not match, the logs will be moved to the working directory
 
 Then it repeats.
 """
+
+from argparse import ArgumentParser, Namespace
+from pathlib import Path
+from typing import Optional, List, Tuple, cast
 import asyncio
 import datetime
 import os
-import sys
 import tempfile
 import unittest
-from typing import Optional, List, Tuple
 
-import grpc
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesRequest
-from v4_proto.dydxprotocol.clob.query_pb2 import StreamOrderbookUpdatesResponse
+import grpc  # type: ignore
+
+from v4_proto.dydxprotocol.clob.query_pb2 import (
+    StreamOrderbookUpdatesRequest,
+    StreamOrderbookUpdatesResponse,
+)
 from v4_proto.dydxprotocol.clob.query_pb2_grpc import QueryStub
 
-import src.book as lob
-import src.config as config
-import src.serde as serde
-from src.feed_handler import StandardFeedHandler
+from grpc_stream_client.book import Order, print_book_side
+from grpc_stream_client.feed_handler import StandardFeedHandler
+import grpc_stream_client.config as config
+import grpc_stream_client.serde as serde
+
+T0_LOG_PATH = Path("feed_from_t0.log")
+T1_LOG_PATH = Path("feed_from_t1.log")
 
 
 class TestFeedHandler(unittest.TestCase):
     def setUp(self):
         # Load the snapshot at t1
-        snap, prev_msg, idx = load_snapshot(asset_path('feed_from_t1.log'))
+        snap, prev_msg, idx = load_snapshot(assets_path(T1_LOG_PATH))
+        assert prev_msg is not None
+        assert idx is not None
         self.assertIsNotNone(idx, "snapshot not found in feed")
-        self.assertGreater(
-            idx,
-            0,
-            "this test only makes sense if the snapshot isn't the first message"
-        )
+        self.assertGreater(idx, 0, "this test only makes sense if the snapshot isn't the first message")
         self.snapshot_state = snap
 
         # Load the full feed from t0 through the message preceding the snapshot
-        feed_path = asset_path('feed_from_t0.log')
-        feed_state, n_messages = load_feed_through_snapshot(feed_path, prev_msg)
+        feed_path = assets_path(T0_LOG_PATH)
+        feed_state, _ = load_feed_through_snapshot(feed_path, prev_msg)
 
         self.feed_state = feed_state
 
@@ -73,22 +79,19 @@ class TestFeedHandler(unittest.TestCase):
         assert_books_equal(self.feed_state, self.snapshot_state)
 
         # Check best bid and ask prices and sizes
-        best_bid: lob.Order = next(self.snapshot_state.books[0].bids())
+        best_bid: Order = next(self.snapshot_state.books[0].bids())
         self.assertEqual(900722659, best_bid.order_id.client_id)
         self.assertEqual(839000000, best_bid.quantums)
         self.assertEqual(10033200000, best_bid.subticks)
 
-        best_ask: lob.Order = next(self.snapshot_state.books[0].asks())
+        best_ask: Order = next(self.snapshot_state.books[0].asks())
         self.assertEqual(1393832, best_ask.order_id.client_id)
         self.assertEqual(896000000, best_ask.quantums)
         self.assertEqual(10033300000, best_ask.subticks)
 
 
-def asks_bids_from_feed(
-        f: StandardFeedHandler,
-        clob_pair_id: int
-) -> Tuple[List[lob.Order], List[lob.Order]]:
-    book = f.get_books().get(clob_pair_id, None)
+def asks_bids_from_feed(feed_handler: StandardFeedHandler, clob_pair_id: int) -> Tuple[List[Order], List[Order]]:
+    book = feed_handler.get_books().get(clob_pair_id, None)
     if not book:
         return [], []
     return list(book.asks()), list(book.bids())
@@ -107,23 +110,20 @@ def assert_books_equal(feed_state_1: StandardFeedHandler, feed_state_2: Standard
         snap_asks, snap_bids = asks_bids_from_feed(feed_state_2, clob_pair_id)
 
         if snap_asks != feed_asks:
-            lob.debug_book_side(feed_asks, snap_asks)
+            print_book_side(feed_asks, snap_asks)
             raise AssertionError(f"asks for book {clob_pair_id} do not match")
         if snap_bids != feed_bids:
-            lob.debug_book_side(feed_bids, snap_bids)
+            print_book_side(feed_bids, snap_bids)
             raise AssertionError(f"bids for book {clob_pair_id} do not match")
 
 
-def asset_path(filename: str) -> str:
-    """ Full path to the test asset file. """
-    return os.path.join(
-        os.path.dirname(__file__),
-        'assets',
-        filename,
-    )
+def assets_path(filename: Path) -> Path:
+    return os.path.dirname(__file__) / Path("assets") / Path(filename)
 
 
-def load_snapshot(path: str) -> Tuple[StandardFeedHandler, StreamOrderbookUpdatesResponse, Optional[int]]:
+def load_snapshot(
+    path: Path,
+) -> Tuple[StandardFeedHandler, Optional[StreamOrderbookUpdatesResponse], Optional[int]]:
     """
     Load the snapshot from the given log file and return the feed handler
     state after processing the snapshot, the message that directly preceded
@@ -162,8 +162,7 @@ def load_snapshot(path: str) -> Tuple[StandardFeedHandler, StreamOrderbookUpdate
 
 
 def load_feed_through_snapshot(
-        path: str,
-        stop_at_msg: StreamOrderbookUpdatesResponse
+    path: Path, stop_at_msg: StreamOrderbookUpdatesResponse
 ) -> Tuple[StandardFeedHandler, int]:
     """
     Load the feed from the given log file through the `stop_at_msg` (inclusive)
@@ -171,7 +170,7 @@ def load_feed_through_snapshot(
     """
     feed_state = StandardFeedHandler()
     n_messages = 0
-    with open(path, 'rb') as log:
+    with open(path, "rb") as log:
         while (x := serde.read_message_from_log(log)) is not None:
             ts, msg = x
             feed_state.handle(msg)
@@ -182,26 +181,26 @@ def load_feed_through_snapshot(
     return feed_state, n_messages
 
 
-async def record_messages(conf: dict, path: str):
+async def record_messages(conf: dict, path: Path):
     """
     Record messages from the gRPC feed to a binary log file.
 
     :param conf: Connection configuration
     :param path: Path to the log file
     """
-    host = conf['dydx_full_node']['grpc_host']
-    port = conf['dydx_full_node']['grpc_port']
-    clob_pair_ids = conf['stream_options']['clob_pair_ids']
+    host = conf["dydx_full_node"]["grpc_host"]
+    port = conf["dydx_full_node"]["grpc_port"]
+    clob_pair_ids = conf["stream_options"]["clob_pair_ids"]
     addr = f"{host}:{port}"
 
-    with open(path, 'wb') as log:
+    with open(path, "wb") as log:
         n = 0
         async with grpc.aio.insecure_channel(addr, config.GRPC_OPTIONS) as channel:
             try:
                 stub = QueryStub(channel)
                 request = StreamOrderbookUpdatesRequest(clob_pair_id=clob_pair_ids)
+                response: StreamOrderbookUpdatesResponse
                 async for response in stub.StreamOrderbookUpdates(request):
-                    response: StreamOrderbookUpdatesResponse
                     ts = datetime.datetime.now()
                     serde.append_message_to_log(log, response, ts)
                     n += 1
@@ -214,15 +213,15 @@ async def record_messages(conf: dict, path: str):
                 print(f"Unexpected error in stream: {e}")
 
 
-async def connect_and_collect_overlapping(conf: dict, parent: str, n_seconds: int):
+async def connect_and_collect_overlapping(conf: dict, parent: Path, n_seconds: int):
     """
     1. Connect to the gRPC feed and collect messages for `n_seconds`.
     2. Connect a second feed and collect messages for 3 seconds concurrently.
     3. Close both feeds.
     4. Return paths to the files log1, log2 inside the provided `dir`.
     """
-    log1 = unique_path(parent, 'feed_from_t0.log')
-    log2 = unique_path(parent, 'feed_from_t1.log')
+    log1 = unique_path(parent, T0_LOG_PATH)
+    log2 = unique_path(parent, T1_LOG_PATH)
 
     # Start recording the first set of messages
     print(f"Recording messages to {log1} for {n_seconds} seconds")
@@ -230,7 +229,7 @@ async def connect_and_collect_overlapping(conf: dict, parent: str, n_seconds: in
     await asyncio.sleep(n_seconds)
 
     # Start recording the second set of messages concurrently
-    print(f"Recording snapshot on a different feed")
+    print("Recording snapshot on a different feed")
     task2 = asyncio.create_task(record_messages(conf, log2))
     await asyncio.sleep(3)
 
@@ -252,22 +251,26 @@ async def connect_and_collect_overlapping(conf: dict, parent: str, n_seconds: in
     return log1, log2
 
 
-def unique_path(parent: str, base: str) -> str:
+def unique_path(parent: Path, base: Path) -> Path:
     """
-    Return a unique path inside the given directory by appending a number to
+    Return a unique path inside the parent directory by appending a number to
     the base name.
     """
-    # Special case: if the base name doesn't exist, just go with that
-    if not os.path.exists(os.path.join(parent, base)):
-        return os.path.join(parent, base)
+    # use base name if available
+    path = parent / base
+    if not os.path.exists(path):
+        return path
 
     n = 1
-    while os.path.exists(os.path.join(parent, f"{base}.{n}")):
-        n += 1
-    return os.path.join(parent, f"{base}.{n}")
+    max_n = 4096
+    for n in range(1, max_n + 1):
+        path = parent / f"{base}.{n}"
+        if not os.path.exists(path):
+            return path
+    raise RuntimeError("max number of subdirectories exist")
 
 
-def replay_test(feed_from_t0_path: str, feed_from_t1_path: str):
+def replay_test(t0_feed: Path, t1_feed: Path):
     """
     Replay the feed from t0 up to the snapshot in t1, load the snapshot from
     t1, and check that the order book state from the t0 feed matches the
@@ -278,28 +281,28 @@ def replay_test(feed_from_t0_path: str, feed_from_t1_path: str):
     :param feed_from_t0_path: Path to feed starting at t0 ending at t2
     :param feed_from_t1_path: Path to feed starting at t1 ending < t2
     """
-    snap, prev_msg, idx = load_snapshot(feed_from_t1_path)
+    snap, prev_msg, idx = load_snapshot(t1_feed)
+    assert prev_msg is not None
     if idx is None:
         print("No snapshot in feed, skipping test...")
     elif idx == 0:
         print("Snapshot was first message, skipping test...")
     else:
-        feed_state, n_messages = load_feed_through_snapshot(feed_from_t0_path, prev_msg)
+        feed_state, _ = load_feed_through_snapshot(t0_feed, prev_msg)
         assert_books_equal(feed_state, snap)
 
 
 async def long_running_test(conf: dict, n_seconds: int):
     while True:
-        # Create a temporary directory
         with tempfile.TemporaryDirectory() as temp_dir:
-            l1, l2 = await connect_and_collect_overlapping(conf, temp_dir, n_seconds)
+            l1, l2 = await connect_and_collect_overlapping(conf, Path(temp_dir), n_seconds)
 
             # Check if the feeds line up
             try:
                 replay_test(l1, l2)
-            except Exception as e:
-                to_dir = os.getcwd()
-                print(f"Identified inconsistent feed states: {e}")
+            except Exception as exc:
+                to_dir = Path(os.getcwd())
+                print(f"Identified inconsistent feed states: {exc}")
                 print(f"Moving logs to {to_dir}")
 
                 to_l1 = unique_path(to_dir, os.path.basename(l1))
@@ -311,20 +314,46 @@ async def long_running_test(conf: dict, n_seconds: int):
                 print(f"Moved {l1} to {to_l1}")
                 print(f"Moved {l2} to {to_l2}")
 
-                raise e
+                raise exc
 
             print("Feed states match")
 
 
-if __name__ == '__main__':
+class Args(Namespace):
+    record_to: Path
+    long_running_test: int
+    replay_from: Path
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--record-to", type=Path)
+    parser.add_argument("--long-running-test", type=int)
+    parser.add_argument("--replay-from", type=Path, nargs=2, metavar=("t0_feed", "t1_feed"))
+    args = parser.parse_args(namespace=Args)
+
     c = config.Config().get_config()
-    if len(sys.argv) > 1 and sys.argv[1] == '--record-to':
-        print(f"Recording messages to '{sys.argv[2]}' with conf {c}")
-        os.makedirs(sys.argv[2], exist_ok=True)
-        asyncio.run(connect_and_collect_overlapping(c, sys.argv[2], 30))
-    elif len(sys.argv) > 1 and sys.argv[1] == '--long-running-test':
-        asyncio.run(long_running_test(c, int(sys.argv[2])))
-    elif len(sys.argv) > 1 and sys.argv[1] == '--replay-from':
-        replay_test(sys.argv[2], sys.argv[3])
+
+    if args.record_to:
+        print(f"Recording messages to '{args.record_to}' with conf {c}")
+        os.makedirs(args.record_to, exist_ok=True)
+        asyncio.run(connect_and_collect_overlapping(c, args.record_to, 30))
+    elif args.long_running_test:
+        asyncio.run(long_running_test(c, args.long_running_test))
+    elif args.replay_from:
+        t0_feed, t1_feed = cast(tuple[Path, Path], args.replay_from)
+        replay_test(t0_feed, t1_feed)
     else:
         unittest.main()
+
+    # c = config.Config().get_config()
+    # if len(sys.argv) > 1 and sys.argv[1] == "--record-to":
+    #     print(f"Recording messages to '{sys.argv[2]}' with conf {c}")
+    #     os.makedirs(sys.argv[2], exist_ok=True)
+    #     asyncio.run(connect_and_collect_overlapping(c, sys.argv[2], 30))
+    # elif len(sys.argv) > 1 and sys.argv[1] == "--long-running-test":
+    #     asyncio.run(long_running_test(c, int(sys.argv[2])))
+    # elif len(sys.argv) > 1 and sys.argv[1] == "--replay-from":
+    #     replay_test(sys.argv[2], sys.argv[3])
+    # else:
+    #     unittest.main()
