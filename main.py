@@ -2,9 +2,9 @@
 # /// script
 # requires-python = ">=3.9"
 # dependencies = [
-#    "grpcio>=1.67.0",
-#    "grpcio-tools==1.64.1",
-#    "protobuf==5.28.1",
+#    "grpcio~=1.71",
+#    "grpcio-tools~=1.71",
+#    "protobuf~=5.29",
 #    "pyyaml==6.0.1",
 #    "requests~=2.32.2",
 #    "sortedcontainers==2.4.0",
@@ -312,6 +312,8 @@ async def main(args: dict, cpid_to_market_info: dict[int, dict]):
         if subaccount_ids:
             joined_subaccount_ids = ",".join([str(x) for x in subaccount_ids])
             params.append(f"subaccountIds={joined_subaccount_ids}")
+        if conf["filter_orders_by_subaccount_id"]:
+            params.append("filterOrdersBySubaccountId=true")
         websocket_port = conf["dydx_full_node"]["websocket_port"]
         params_str = "&".join(params)
         websocket_addr = f"ws://{host}:{websocket_port}/ws?{params_str}"
