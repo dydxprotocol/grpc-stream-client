@@ -1,5 +1,7 @@
 dydx_full_node:
-  host: 127.0.0.1 # fill in the IP address of your full node
+  #host: 127.0.0.1 # fill in the IP address of your full node
+  #host: 54.64.201.139
+  host: mainnet-indexer
   grpc_port: 9090
   websocket_port: 9092
 use_grpc: true
@@ -14,7 +16,8 @@ stream_options:
 interval_ms: 1000 # Print book state every second
 indexer_api: https://indexer.dydx.trade # Used to fetch data for unit conversions
 log_stream_messages: feed.log # Log messages to this file each time main is run
-print_fills: false # Whether to print fills
+print_fills: true # Whether to print fills
 print_books: false # Whether to print books
 print_subaccounts: true # Whether to print subaccounts
 print_taker_orders: true # Whether to print taker orders
+filter_orders_by_subaccount_id: false

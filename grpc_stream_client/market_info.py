@@ -2,6 +2,7 @@
 Data to (1) convert integer price and quantity fields to human-readable decimals
 and (2) map numeric market ids to human-readable instrument names.
 """
+
 import requests
 
 # N.b. can also query this from
@@ -12,18 +13,14 @@ USDC_ATOMIC_RESOLUTION = -6
 
 
 def quantums_to_size(quantums: int, atomic_resolution: int) -> float:
-    """
-    Convert quantums to a human-readable size.
-    """
-    return quantums / 10 ** -atomic_resolution
+    """Convert quantums to a human-readable size"""
+    return quantums / 10**-atomic_resolution
 
 
 def subticks_to_price(subticks: int, atomic_resolution: int, quantum_conversion_exponent: int) -> float:
-    """
-    Convert subticks to a human-readable price.
-    """
+    """Convert subticks to a human-readable price"""
     exponent = atomic_resolution - quantum_conversion_exponent - USDC_ATOMIC_RESOLUTION
-    return subticks / 10 ** exponent
+    return subticks / 10**exponent
 
 
 def query_market_info(indexer_api) -> dict[int, dict]:
@@ -38,4 +35,4 @@ def query_market_info(indexer_api) -> dict[int, dict]:
     resp = requests.get(uri)
     if resp.status_code != 200:
         raise ValueError(f"Failed to query markets from {uri}: {resp.text}")
-    return {int(x['clobPairId']): x for _, x in resp.json()["markets"].items()}
+    return {int(market["clobPairId"]): market for market in resp.json()["markets"].values()}

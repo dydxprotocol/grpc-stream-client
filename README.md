@@ -18,7 +18,7 @@ Add the full node address to the `config.yaml` file.
 
 ### Logic
 
-See [main.py](main.py) and [src/feed_handler.py](src/feed_handler.py) for an example of 
+See [main.py](main.py) and [grpc_stream_client/feed_handler.py](grpc_stream_client/feed_handler.py) for an example of 
 how messages are used to update the book state.
 
 ### Book Streaming Example
